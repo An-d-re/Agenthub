@@ -2,9 +2,26 @@
 
 from app.core.database import Base
 
-# Models will be imported here as they are created:
-# from app.models.agent import Agent
-# from app.models.session import Session
-# ...
+from app.models.agent import Agent
+from app.models.artifact import Artifact
+from app.models.message import Message, PinnedMessage
+from app.models.plan import Plan
+from app.models.session import Session, SessionAgent
+from app.models.task import Task, TaskDependency
+from app.models.trace import Trace
+from app.models.user_settings import UserSettings
 
-__all__ = ["Base"]
+__all__ = [
+    "Base",
+    "Agent",
+    "Artifact",
+    "Message",
+    "PinnedMessage",
+    "Plan",
+    "Session",
+    "SessionAgent",
+    "Task",
+    "TaskDependency",
+    "Trace",
+    "UserSettings",
+]

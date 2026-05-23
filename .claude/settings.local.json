@@ -16,7 +16,20 @@
       "Bash(timeout 5 python -c \"from app.main import app; print\\('FastAPI ok'\\)\")",
       "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8000)",
       "Bash(npx next *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(alembic init *)",
+      "Bash(alembic revision *)",
+      "Bash(alembic upgrade *)",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(rm -f data/agenthub.db)",
+      "Bash(python -c \"import sys,json; [print\\(a['name'], a['id'][:8]\\) for a in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s http://localhost:8000/api/agents)",
+      "Bash(python -c \"import sys,json; [print\\(s['title'], s['id'][:8], 'agents:', s['agent_count']\\) for s in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d \"{\\\\\"name\\\\\":\\\\\"Claude\\\\\",\\\\\"role_type\\\\\":\\\\\"system\\\\\",\\\\\"adapter_type\\\\\":\\\\\"anthropic\\\\\",\\\\\"capability_tags\\\\\":[\\\\\"code\\\\\",\\\\\"refactor\\\\\"]}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d \"{\\\\\"name\\\\\":\\\\\"OpenCode\\\\\",\\\\\"role_type\\\\\":\\\\\"system\\\\\",\\\\\"adapter_type\\\\\":\\\\\"opencode\\\\\",\\\\\"capability_tags\\\\\":[\\\\\"coding\\\\\",\\\\\"web\\\\\"]}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d \"{\\\\\"name\\\\\":\\\\\"DeepSeek\\\\\",\\\\\"role_type\\\\\":\\\\\"system\\\\\",\\\\\"adapter_type\\\\\":\\\\\"deepseek\\\\\",\\\\\"capability_tags\\\\\":[\\\\\"chat\\\\\",\\\\\"reasoning\\\\\"]}\")",
+      "Bash(python -c \"import sys,json; [print\\(s['title'],'agents:',s['agent_count']\\) for s in json.load\\(sys.stdin\\)]\")"
     ]
   }
 }
