@@ -32,7 +32,8 @@
       "Bash(python -c \"import sys,json; [print\\(s['title'],'agents:',s['agent_count']\\) for s in json.load\\(sys.stdin\\)]\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/ws/test?client_id=abc123)",
       "Bash(python -c ' *)",
-      "Bash(curl -s -X POST http://localhost:8000/api/sessions -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"WSTest\\\\\",\\\\\"type\\\\\":\\\\\"group\\\\\",\\\\\"agent_ids\\\\\":[]}\")"
+      "Bash(curl -s -X POST http://localhost:8000/api/sessions -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"WSTest\\\\\",\\\\\"type\\\\\":\\\\\"group\\\\\",\\\\\"agent_ids\\\\\":[]}\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)"
     ]
   }
 }
