@@ -32,7 +32,23 @@
       "Bash(python -c \"import sys,json; [print\\(s['title'],'agents:',s['agent_count']\\) for s in json.load\\(sys.stdin\\)]\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/ws/test?client_id=abc123)",
       "Bash(python -c ' *)",
-      "Bash(curl -s -X POST http://localhost:8000/api/sessions -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"WSTest\\\\\",\\\\\"type\\\\\":\\\\\"group\\\\\",\\\\\"agent_ids\\\\\":[]}\")"
+      "Bash(curl -s -X POST http://localhost:8000/api/sessions -H \"Content-Type: application/json\" -d \"{\\\\\"title\\\\\":\\\\\"WSTest\\\\\",\\\\\"type\\\\\":\\\\\"group\\\\\",\\\\\"agent_ids\\\\\":[]}\")",
+      "Bash(python -c \"from app.core.prompts import CRITIC_SYSTEM_PROMPT, PLANNER_APPROACHES_PROMPT, PLANNER_DECOMPOSE_PROMPT, CODER_TASK_PROMPT, REVIEWER_PROMPT_PREFIX; print\\('prompts OK'\\)\")",
+      "Bash(python -c \"from app.core.middleware import MiddlewareChain; print\\('middleware OK'\\)\")",
+      "Bash(python -c \"from app.core.orchestrator import Orchestrator; print\\('orchestrator OK'\\)\")",
+      "Bash(python -c \"from app.ws.ws_routes import router; print\\('ws_routes OK'\\)\")",
+      "Bash(pip install *)",
+      "Bash(python -c \"from app.core.prompts import CRITIC_SYSTEM_PROMPT; print\\('prompts OK'\\)\")",
+      "Bash(python -c \"from app.main import app; print\\('main OK'\\)\")",
+      "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('data/agenthub.db'\\); [print\\(row\\) for row in conn.execute\\('SELECT id, name, adapter_type FROM agents'\\).fetchall\\(\\)]; conn.close\\(\\)\")",
+      "Bash(python -c \"from app.core.config import settings; print\\('DeepSeek key:', 'SET' if settings.deepseek_api_key else 'MISSING'\\)\")",
+      "Bash(uvicorn app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(python -c *)",
+      "Bash(pkill -f \"uvicorn\")",
+      "Bash(pkill -f \"python.*main\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill /F /PID 30416)",
+      "Bash(taskkill *)"
     ]
   }
 }
