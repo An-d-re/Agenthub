@@ -111,3 +111,15 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
             },
         }
         await event_bus.publish(session_id, msg_data)
+
+    # Trigger agent reply in background
+    asyncio.create_task(_trigger_agent(session_id, content))
+
+
+async def _trigger_agent(session_id: str, content: str):
+    """Fire-and-forget agent reply."""
+    from app.services.agent_runner import run_agent_reply
+    try:
+        await run_agent_reply(session_id, content)
+    except Exception:
+        pass
