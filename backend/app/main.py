@@ -9,6 +9,7 @@ from app.api.agents import router as agents_router
 from app.api.sessions import router as sessions_router
 from app.core.config import settings
 from app.core.database import init_db
+from app.ws.ws_routes import router as ws_router
 
 
 @asynccontextmanager
@@ -29,6 +30,7 @@ app.add_middleware(
 
 app.include_router(agents_router)
 app.include_router(sessions_router)
+app.include_router(ws_router)
 
 
 @app.get("/api/health")
