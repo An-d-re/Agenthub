@@ -1,0 +1,115 @@
+# AI 协作日志
+
+## 项目背景
+
+- **赛事**: 字节跳动 AI 全栈开发挑战赛（20 天）
+- **角色**: 用户 = 产品经理 + 架构师；AI = 全部代码实现者
+- **AI 协作分**: 占总分 30%（最高），考察 prompt 工程 + AI 协作规范 + 迭代过程
+
+## 架构演进
+
+### v1（初始方案）
+- socket.io，Redis Pub/Sub，Orchestrator 在 services/ 下
+- **否决原因**: 比赛单机部署不需要 Redis；socket.io 多余；Orchestrator 应是中枢
+
+### v2（精简后）
+- FastAPI 原生 WS，asyncio.Queue 替代 Redis，Orchestrator 提升到 core/
+- @角色体系 (@planner/@coder/@reviewer)，Adapter 层支持 DeepSeek + Anthropic + OpenCode
+- **问题**: 用户需求直接拆解执行，无确认环节；无上下文管理；无防御机制
+
+### v3（当前版本）
+- **四阶段交互模型**: 需求澄清 → 方案对比 → 计划确认 → 迭代执行
+- **Middleware 链**: ContextSummarizer → LoopDetector → SubagentLimiter
+- **反驳机制**: Coder 可反驳 Planner 分配，Coder 可反驳 Reviewer 意见，Agent 可质疑用户错误决策
+- **砍掉**: Codex 桩、一键部署按钮、Web Preview
+
+## 关键决策记录
+
+### 2026-05-22
+
+1. **技术栈**: Next.js 14 + FastAPI + PostgreSQL + Docker Compose, 原生 WebSocket
+2. **Orchestrator 在 core/**: 调度中枢,非 service 子模块
+3. **Agent 角色屏蔽平台**: @planner/@coder/@reviewer/@architect, 会话内绑定适配器
+4. **无登录**: 打开即用
+5. **DeepSeek 主力 + Anthropic API (Claude 模型) + OpenCode 第二平台**（全部 HTTP API）
+6. **砍 Redis**: asyncio.Queue 单机足够
+7. **可观测性**: trace/span 贯穿全链路,前端瀑布图
+
+### 2026-05-22（晚）
+
+8. **四阶段交互模型**: 像 Claude Code 一样先思考再动手
+9. **@critic 角色**: 拷打用户需求,防止盲从
+10. **多方案对比**: 按需生成 (gate: 多种合理路线时触发)
+11. **澄清终止条件**: 最多 2 轮追问,之后标注"假设"进入方案阶段
+12. **用户介入粒度**: Session 级 (暂停/继续/停止) + Task 级 (重试/取消),不做内容编辑
+13. **反驳上限**: 每轮辩论最多 1 次 rebuttal,不一致则交用户裁决
+14. **Agent 产出文件存储**: workspaces/{session_id}/ 持久化, 支持 Diff
+15. **Plan DAG 编辑**: 先做轻量 checklist,有时间再升级拖拽
+16. **演示方式**: 录屏
+
+### 2026-05-23（需求对齐）
+
+17. **Agent = 联系人模型**: WeChat 式, 会话列表即联系人列表, 点即聊
+18. **单聊透明 / 群聊可见**: 单聊后台调度无感, 群聊 Orchestrator 可见群主
+19. **上下文管理**: Compact(LLM 摘要) + Pin(手动标记) + 最近 15 条原文
+20. **OpenCode 为第二 Adapter**: 字节系, HTTP API
+21. **自建 Agent**: 预置 Skill 库勾选 (5 个: 代码生成/审查/SQL/文档/Web) + 示例 SQLite
+22. **群聊成员随时增删**: 移除时 task 退回 pending 重分配
+23. **失败降级**: 自动重试 1 次 → 再败 Orchestrator 发消息问用户
+24. **对话式局部修改**: P2→P1, 选中代码行 → 描述 → Agent 精准改 → Diff 卡片
+25. **文件上传**: 做, workspaces/{session_id}/uploads/
+26. **部署**: P2 不实现, 预留 /deploy 接口桩, 答辩讲设计思路; /preview 静态 serve 替代
+27. **Smoke test**: 每个 Phase 交付后跑 curl + 浏览器手动验证
+28. **预置 Skill 库**: 5 个, 含 system prompt 注入 + 标签推导
+29. **会话并发上限**: Semaphore(3), 用户可配置
+30. **Docker 砍掉**: SQLite + asyncio.Queue 单机零依赖
+31. **砍掉 Claude Code CLI**: 改用 Anthropic HTTP API, 三个 Adapter 全部 HTTP, 省去 subprocess 管理
+
+### 2026-05-23（评审修订，DeepSeek 反馈采纳）
+
+32. **WS 断线恢复**: 重连后通过 REST 补齐完整消息，流式 token 不恢复，答辩说明
+33. **Semaphore 作用域**: Session 级限制，内部 task 调度用 SubagentLimiter 独立控制
+34. **Skill 合并规则**: 按勾选顺序拼接，冲突时后者覆盖，用户 System Prompt 最高优先级
+35. **BaseAdapter 级重试**: 指数退避 3 次 (1s/2s/4s)，429/503 → 自动重试
+36. **反驳 fallback**: 1 轮上限 + 用户裁决已足够，不加关键词规则
+37. **Day5 减负**: 只做核心消息类型 (chat.send/message/stream/ping)
+38. **Day14 最小化 demo**: 群聊→澄清→选方案→完成 1 task，锁死核心链路
+39. **user_settings**: 仅运行时动态设置，静态配置走环境变量
+40. **架构扩展**: 文档注明 asyncio.Queue 可替换为 Redis Pub/Sub
+23. **失败降级**: 自动重试 1 次 → 再败 Orchestrator 发消息问用户
+24. **对话式局部修改**: P2→P1, 选中代码行 → 描述 → Agent 精准改 → Diff 卡片
+25. **文件上传**: 做, workspaces/{session_id}/uploads/
+26. **部署**: P2 不实现, 预留 /deploy 接口桩, 答辩讲设计思路; /preview 静态 serve 替代
+27. **Smoke test**: 每个 Phase 交付后跑 curl + 浏览器手动验证
+28. **预置 Skill 库**: 5 个, 含 system prompt 注入 + 标签推导
+29. **会话并发上限**: Semaphore(3), 用户可配置
+30. **Docker 砍掉**: SQLite + asyncio.Queue 单机零依赖
+
+## Prompt 工程沉淀
+
+### Critic Prompt 要点
+- 角色: 质疑需求的技术顾问
+- 最多 2 轮追问
+- 关注: scope 是否合理 / 是否有更简单方案 / 用户是否真正需要
+- 第 2 轮后仍有模糊点 → 标注"以下假设成立: ..."进入方案阶段
+
+### Planner Prompt 要点
+- Gate 判断: 只有一种最佳实践 → 直接解释；多种合理路线 → 出对比；用户要求 → 强制出
+- 方案对比输出: A/B/C 方案 + 各自优劣 + 推荐理由
+- 任务拆解要求: 原子性、可并行性标注、依赖声明
+
+### Reviewer Prompt 要点
+- 检查: 正确性、安全性、简洁性
+- 对 Coder 的反驳: 重新评估,基于论据修正结论,不坚持己见
+- 如仍不一致: 标记 `dispute` 交用户裁决
+
+### Coder Prompt 要点
+- 有义务指出不合理任务并给出拆解建议
+- 对安全/性能层面的用户错误要求**必须拒绝并解释**
+- 反驳 Reviewer 时必须给出具体技术依据，非主观偏好
+
+## 参考外部项目
+
+- **DeerFlow 2.0**: 14 层中间件洋葱模型, Lead Agent + Sub-Agent, Plan 模式, 三层记忆
+- **M3-Agent**: 双进程并行 (Memorization + Control), 实体中心化记忆图, 多轮迭代推理
+- **TRAE SOLO**: Plan 模式先出作战图, Agentic Edit, Sub Agent 并行, DiffView

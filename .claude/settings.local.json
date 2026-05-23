@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(gh repo *)",
+      "Bash(gh api *)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:blog.csdn.net)",
+      "WebFetch(domain:cloud.tencent.com)",
+      "WebFetch(domain:bytedance.larkoffice.com)",
+      "WebFetch(domain:www.sohu.com)",
+      "Bash(npx create-next-app@14 frontend --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm)",
+      "Bash(npx shadcn-ui@latest init -d --force)",
+      "Bash(npx shadcn@latest add button input textarea card scroll-area tabs separator tooltip dropdown-menu dialog avatar badge skeleton -y)",
+      "Bash(timeout 5 python -c \"from app.main import app; print\\('FastAPI ok'\\)\")",
+      "Bash(python -m uvicorn app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(npx next *)",
+      "Bash(npm install *)"
+    ]
+  }
+}
