@@ -110,7 +110,7 @@ async def list_messages(
         q = q.where(Message.created_at > since)
     q = q.limit(limit)
     result = await db.execute(q)
-    return reversed(result.scalars().all())
+    return list(reversed(result.scalars().all()))
 
 
 @router.post("/{session_id}/pin")

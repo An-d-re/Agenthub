@@ -92,3 +92,4 @@ Output ONLY valid JSON (no markdown fences):
 
 Or if issues found:
 {"passed": false, "feedback": "What is wrong and why", "suggested_changes": "How to fix specifically"}"""
+# REVIEWER_PROMPT_PREFIX 当前 MVP 阶段未使用，待后续 Reviewer+反驳机制上线时启用

@@ -6,6 +6,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -56,8 +57,8 @@ async def websocket_endpoint(
                     await manager.send_personal({"type": "pong", "session_id": session_id}, client_id)
         except WebSocketDisconnect:
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).exception("ws_to_eventbus 异常: %s", e)
         finally:
             manager.disconnect(client_id)
 
@@ -69,8 +70,8 @@ async def websocket_endpoint(
                 await manager.send_personal(event, client_id)
         except asyncio.CancelledError:
             pass
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).exception("eventbus_to_ws 异常: %s", e)
 
     await asyncio.gather(ws_to_eventbus(), eventbus_to_ws())
 
@@ -128,5 +129,5 @@ async def _trigger_agent(session_id: str, content: str):
     from app.services.agent_runner import run_agent_reply
     try:
         await run_agent_reply(session_id, content)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.getLogger(__name__).exception("_trigger_agent 异常: %s", e)

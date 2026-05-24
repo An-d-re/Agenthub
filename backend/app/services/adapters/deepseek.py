@@ -72,9 +72,10 @@ class DeepSeekAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("DeepSeek send_message 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -102,9 +103,10 @@ class DeepSeekAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("DeepSeek stream_message 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -122,11 +124,6 @@ class DeepSeekAdapter(BaseAdapter):
 
         system_prompt = context.config.get("system_prompt", "")
         full_system = f"{system_prompt}\n\n{task_context}" if system_prompt else task_context
-
-        messages = self._build_messages(context, task_context, system_override=full_system)
-        # 去掉最后一条 user message（task_context 已经包含了），替换为更完整的 prompt
-        messages = [m for m in messages if m.get("role") != "user"]
-        messages.append({"role": "user", "content": task_context})
 
         # 加入对话历史
         history_msgs = []
@@ -155,9 +152,10 @@ class DeepSeekAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("DeepSeek execute_task 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -194,9 +192,10 @@ class DeepSeekAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("DeepSeek review_result 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 

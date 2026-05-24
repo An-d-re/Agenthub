@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useChatStore, type TraceSpan } from "@/stores/chatStore";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/constants";
 
 const SERVICE_COLORS: Record<string, string> = {
   deepseek: "#22c55e",
@@ -23,18 +22,25 @@ export function TracePanel() {
   const [spans, setSpans] = useState<TraceSpan[]>([]);
 
   useEffect(() => {
-    if (!activeSessionId) return;
+    if (!activeSessionId) {
+      setSpans([]);
+      return;
+    }
+    let cancelled = false;
     const fetchTraces = async () => {
       try {
         const res = await fetch(`${API_BASE}/api/traces?session_id=${activeSessionId}&limit=50`);
-        if (res.ok) {
+        if (res.ok && !cancelled) {
           setSpans(await res.json());
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.error("获取追踪数据失败:", e); }
     };
     fetchTraces();
     const interval = setInterval(fetchTraces, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [activeSessionId]);
 
   if (!activeSessionId || spans.length === 0) {

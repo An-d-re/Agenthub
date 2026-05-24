@@ -1,29 +1,30 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useChatStore } from "@/stores/chatStore";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { API_BASE } from "@/lib/constants";
 
 export function useContacts() {
   const sessions = useChatStore((s) => s.sessions);
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const setActiveSession = useChatStore((s) => s.setActiveSession);
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/sessions`);
       if (res.ok) {
         const data = await res.json();
-        useChatStore.getState().setSessions(data);
-        if (!useChatStore.getState().activeSessionId && data.length > 0) {
-          useChatStore.getState().setActiveSession(data[0].id);
+        if (Array.isArray(data)) {
+          useChatStore.getState().setSessions(data);
+          if (!useChatStore.getState().activeSessionId && data.length > 0) {
+            useChatStore.getState().setActiveSession(data[0].id);
+          }
         }
       }
-    } catch {
-      // server not ready yet
+    } catch (e) {
+      console.error("获取会话列表失败:", e);
     }
-  };
+  }, []);
 
   const createSession = async (title: string, type: string = "single") => {
     try {
@@ -39,15 +40,15 @@ export function useContacts() {
         useChatStore.getState().setActiveSession(session.id);
         return session;
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("创建会话失败:", e);
     }
     return null;
   };
 
   useEffect(() => {
     fetchSessions();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchSessions]);
 
   return { sessions, activeSessionId, setActiveSession, createSession, refresh: fetchSessions };
 }

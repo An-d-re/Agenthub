@@ -1,18 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-
-export interface Approach {
-  name: string;
-  summary: string;
-  pros: string[];
-  cons: string[];
-  recommended: boolean;
-}
+import type { Approach } from "@/stores/chatStore";
 
 interface PlanCardProps {
   approaches: Approach[];
@@ -22,6 +15,10 @@ interface PlanCardProps {
 
 export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
   const [chosen, setChosen] = useState<string | undefined>(selected);
+
+  useEffect(() => {
+    setChosen(selected);
+  }, [selected]);
 
   const handleSelect = (a: Approach) => {
     setChosen(a.name);

@@ -21,12 +21,12 @@ from app.core.database import async_session
 from app.core.event_bus import event_bus
 from app.core.middleware import MiddlewareChain, MiddlewareContext
 from app.core.prompts import (
-from app.core.tracer import tracer
     CODER_TASK_PROMPT,
     CRITIC_SYSTEM_PROMPT,
     PLANNER_APPROACHES_PROMPT,
     PLANNER_DECOMPOSE_PROMPT,
 )
+from app.core.tracer import tracer
 from app.models.agent import Agent
 from app.models.message import Message
 from app.models.plan import Plan
@@ -50,15 +50,24 @@ class Orchestrator:
 
     MAX_CLARIFY_ROUNDS = 2  # 最多澄清轮数
     MAX_TASK_RETRIES = 1    # 自动重试次数
+    _locks: dict[str, asyncio.Lock] = {}  # 按 session 串行化，防止竞态
 
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.middleware = MiddlewareChain()
+        self._pending_events: list[dict] = []  # 收集事件，commit 后批量发布
 
     # ── 公开入口 ──────────────────────────────────────────────
 
     async def handle_message(self, user_message: str) -> None:
         """处理一条用户消息。由 ws_routes.py 通过 create_task 调用。"""
+        # 按 session 加锁，防止并发消息导致 Plan 状态竞态
+        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with lock:
+            await self._handle_message_locked(user_message)
+
+    async def _handle_message_locked(self, user_message: str) -> None:
+        """在 session 锁保护下处理消息。"""
         try:
             async with async_session() as db:
                 plan = await self._get_or_create_active_plan(db)
@@ -78,13 +87,25 @@ class Orchestrator:
                 elif phase == "executing":
                     await self._phase_executing(db, plan, user_message)
                 elif phase == "done":
-                    await self._send_system_message(
-                        db, "所有任务已完成。如需新需求，请创建新的会话。"
-                    )
+                    # 清理中间件 per-session 状态
+                    self.middleware.reset_session(self.session_id)
+                    # 如果用户发送了新的需求，重新启动工作流
+                    if len(user_message.strip()) > 5:
+                        plan.phase = "clarify"
+                        plan.task_dag = {}
+                        plan.approaches = None
+                        await self._send_system_message(db, "检测到新需求，重新开始工作流。")
+                        await self._phase_clarify(db, plan, user_message)
+                    else:
+                        await self._send_system_message(
+                            db, "所有任务已完成。请发送新的需求，或创建新的会话。"
+                        )
                 else:
                     logger.warning("未知的 Plan 阶段: %s", phase)
 
                 await db.commit()
+            # 事务提交成功后，批量发布收集的事件
+            await self._flush_pending_events()
         except Exception as e:
             logger.exception("Orchestrator.handle_message 失败: %s", e)
             await self._publish_error(f"编排器出错：{e}")
@@ -97,10 +118,10 @@ class Orchestrator:
         clarify_round = task_dag.get("clarify_round", 0)
 
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
-            # 已够轮数，直接进入方案对比阶段
+            # 已够轮数，直接进入方案对比阶段（澄清消息不传给 comparison）
             plan.phase = "comparison"
             await self._send_system_message(db, "需求澄清已完成。正在生成方案选项…")
-            await self._phase_comparison(db, plan, user_message)
+            await self._phase_comparison(db, plan, "")
             return
 
         # 获取 Critic Agent（用第一个 session agent）
@@ -133,8 +154,8 @@ class Orchestrator:
         db.add(msg)
         await db.flush()
 
-        # 发布到 EventBus
-        await event_bus.publish(self.session_id, {
+        # 收集到 _pending_events，事务 commit 后统一发布
+        self._pending_events.append({
             "type": "chat.message",
             "session_id": self.session_id,
             "payload": {
@@ -155,12 +176,11 @@ class Orchestrator:
         if clarify_round >= self.MAX_CLARIFY_ROUNDS or self._critic_has_signaled_done(content):
             plan.phase = "comparison"
             plan.task_dag = {}  # 清理临时数据
-            await self._phase_comparison(db, plan, user_message)
+            await self._phase_comparison(db, plan, "")  # 澄清消息不传给方案对比
 
     def _critic_has_signaled_done(self, content: str) -> bool:
         """检查 Critic 是否发出了完成信号。"""
-        signals = ["不再需要澄清", "可以往下推进", "需求已经明确", "proceed", "moving on",
-                    "我的假设", "assumptions", "可以开始了", "准备好了"]
+        signals = ["不再需要澄清", "可以往下推进", "需求已经明确", "可以开始了", "准备好了"]
         lower = content.lower()
         return any(s.lower() in lower for s in signals)
 
@@ -241,7 +261,7 @@ class Orchestrator:
         db.add(msg)
         await db.flush()
 
-        await event_bus.publish(self.session_id, {
+        self._pending_events.append({
             "type": "plan.comparison",
             "session_id": self.session_id,
             "payload": {"approaches": approaches, "message_id": msg.id},
@@ -427,6 +447,7 @@ class Orchestrator:
 
         # 获取并发许可
         await self.middleware.subagent_limiter.acquire(self.session_id)
+        adapter = None
         try:
             # 获取 Agent
             agent, adapter = await self._get_agent_adapter(db, task.assigned_agent_id)
@@ -442,12 +463,11 @@ class Orchestrator:
             await db.flush()
             await self._publish_task_update(task, "in_progress")
 
-            # 构建上下文并调用 Agent
-            history = await self._get_conversation_history(db)
+            # 构建上下文并调用 Agent（使用中间件处理后的历史）
             context = AgentContext(
                 session_id=self.session_id,
                 agent_role=AgentRole.CODER,
-                conversation_history=history,
+                conversation_history=mw_ctx.conversation_history,
                 current_task={"id": task.id, "title": task.title, "description": task.description},
                 config={"system_prompt": CODER_TASK_PROMPT},
             )
@@ -488,7 +508,7 @@ class Orchestrator:
                 logger.exception("任务执行失败: %s", e)
                 task.error_message = str(e)
 
-                if task.retry_count < self.MAX_TASK_RETRIES:
+                if task.retry_count < (task.max_retries or self.MAX_TASK_RETRIES):
                     task.status = "retry"
                     task.retry_count += 1
                     await self._send_system_message(
@@ -505,6 +525,11 @@ class Orchestrator:
                     )
                     return
         finally:
+            if adapter:
+                try:
+                    await adapter.stop()
+                except Exception:
+                    logger.exception("关闭适配器失败: %s", adapter.adapter_type)
             self.middleware.subagent_limiter.release(self.session_id)
 
         # 检查是否全部完成，继续执行下一个就绪任务
@@ -595,7 +620,7 @@ class Orchestrator:
         ]
 
     async def _send_system_message(self, db: AsyncSession, content: str) -> Message:
-        """持久化系统消息并发布到 EventBus。"""
+        """持久化系统消息。事件在事务 commit 后统一发布。"""
         msg = Message(
             session_id=self.session_id,
             role="system",
@@ -604,7 +629,7 @@ class Orchestrator:
         )
         db.add(msg)
         await db.flush()
-        await event_bus.publish(self.session_id, {
+        self._pending_events.append({
             "type": "chat.message",
             "session_id": self.session_id,
             "payload": {
@@ -618,8 +643,8 @@ class Orchestrator:
         return msg
 
     async def _publish_task_update(self, task: Task, status: str) -> None:
-        """发布任务状态变更事件。"""
-        await event_bus.publish(self.session_id, {
+        """收集任务状态变更事件，事务 commit 后统一发布。"""
+        self._pending_events.append({
             "type": "task.update",
             "session_id": self.session_id,
             "payload": {
@@ -632,7 +657,7 @@ class Orchestrator:
         })
 
     async def _publish_error(self, message: str) -> None:
-        """发布错误消息到 EventBus。"""
+        """发布错误消息到 EventBus（立即发布，不走 pending 队列）。"""
         await event_bus.publish(self.session_id, {
             "type": "chat.message",
             "session_id": self.session_id,
@@ -645,29 +670,54 @@ class Orchestrator:
             },
         })
 
+    async def _flush_pending_events(self) -> None:
+        """在事务提交后批量发布收集的事件。"""
+        try:
+            for event in self._pending_events:
+                await event_bus.publish(self.session_id, event)
+        finally:
+            self._pending_events.clear()
+
     async def _check_all_done(self, db: AsyncSession, plan: Plan) -> bool:
         """检查所有任务是否完成。全部完成则标记 plan 为 done。"""
         result = await db.execute(select(Task).where(Task.plan_id == plan.id))
         all_tasks = list(result.scalars().all())
         if all_tasks and all(t.status == "done" for t in all_tasks):
             plan.phase = "done"
-            plan.status = "active"  # 保留为 active，不算完成
+            plan.status = "completed"
             await self._send_system_message(db, "🎉 所有任务已完成！")
             return True
         return False
 
     def _extract_json_array(self, text: str) -> Optional[list]:
-        """从 LLM 输出中提取 JSON 数组（处理 markdown 代码块）。"""
-        # 尝试匹配 JSON 数组
-        match = re.search(r'\[\s*\{.*?\}\s*\]', text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
+        """从 LLM 输出中提取 JSON 数组（处理 markdown 代码块和嵌套对象）。"""
+        # 先去掉 markdown 代码块标记
+        cleaned = re.sub(r'```(?:json)?\s*|\s*```', '', text)
+        # 找最外层的 JSON 数组
+        start = cleaned.find('[')
+        if start >= 0:
+            # 从 start 开始，逐字符追踪括号深度，找到匹配的 ]
+            depth = 0
+            end = start
+            for i in range(start, len(cleaned)):
+                c = cleaned[i]
+                if c == '[':
+                    depth += 1
+                elif c == ']':
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            if end > start:
+                try:
+                    result = json.loads(cleaned[start:end])
+                    if isinstance(result, list):
+                        return result
+                except json.JSONDecodeError:
+                    pass
         # 尝试整段解析
         try:
-            result = json.loads(text)
+            result = json.loads(cleaned)
             if isinstance(result, list):
                 return result
         except json.JSONDecodeError:
@@ -675,15 +725,30 @@ class Orchestrator:
         return None
 
     def _extract_json(self, text: str) -> Optional[dict]:
-        """从 LLM 输出中提取 JSON 对象。"""
-        match = re.search(r'\{.*\}', text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except json.JSONDecodeError:
-                pass
+        """从 LLM 输出中提取 JSON 对象（处理嵌套大括号）。"""
+        cleaned = re.sub(r'```(?:json)?\s*|\s*```', '', text)
+        start = cleaned.find('{')
+        if start >= 0:
+            depth = 0
+            end = start
+            for i in range(start, len(cleaned)):
+                c = cleaned[i]
+                if c == '{':
+                    depth += 1
+                elif c == '}':
+                    depth -= 1
+                    if depth == 0:
+                        end = i + 1
+                        break
+            if end > start:
+                try:
+                    result = json.loads(cleaned[start:end])
+                    if isinstance(result, dict):
+                        return result
+                except json.JSONDecodeError:
+                    pass
         try:
-            result = json.loads(text)
+            result = json.loads(cleaned)
             if isinstance(result, dict):
                 return result
         except json.JSONDecodeError:
@@ -732,7 +797,7 @@ class Orchestrator:
             }
             artifacts.append(art_data)
 
-            await event_bus.publish(self.session_id, {
+            self._pending_events.append({
                 "type": "artifact.created",
                 "session_id": self.session_id,
                 "payload": {
@@ -765,7 +830,7 @@ class Orchestrator:
             }
             artifacts.append(art_data)
 
-            await event_bus.publish(self.session_id, {
+            self._pending_events.append({
                 "type": "artifact.created",
                 "session_id": self.session_id,
                 "payload": {
@@ -780,15 +845,17 @@ class Orchestrator:
         return artifacts
 
     def _guess_file_path(self, full_content: str, code: str, language: str) -> str:
-        """从注释或上下文猜测文件路径。"""
-        # 常见模式: // File: src/xxx.py
+        """从注释或上下文猜测文件路径，防止路径穿越。"""
         path_match = re.search(
             r'(?:File|文件|path):\s*([^\s\n]+)', full_content, re.IGNORECASE
         )
         if path_match:
-            return path_match.group(1)
+            raw = path_match.group(1)
+            # 清理路径穿越字符
+            raw = re.sub(r'\.\.+', '', raw)
+            raw = raw.lstrip('/\\~')
+            return raw
 
-        # 根据语言给默认名
         ext_map = {
             "python": "output.py", "py": "output.py",
             "typescript": "output.ts", "ts": "output.ts",

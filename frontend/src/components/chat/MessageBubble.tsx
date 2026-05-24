@@ -1,6 +1,7 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/stores/chatStore";
 
@@ -13,7 +14,7 @@ export function MessageBubble({ message }: Props) {
     return (
       <div className="flex justify-center w-full my-2">
         <div className="max-w-[85%] text-center text-xs text-muted-foreground px-4 py-2">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
       </div>
     );
@@ -37,7 +38,7 @@ export function MessageBubble({ message }: Props) {
           </div>
         )}
         <div className="text-sm whitespace-pre-wrap">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
       </div>
     </div>

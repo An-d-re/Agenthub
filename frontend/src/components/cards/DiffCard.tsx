@@ -9,24 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { ArtifactItem } from "@/stores/chatStore";
+import { API_BASE } from "@/lib/constants";
 
 const MonacoDiff = dynamic(
   () => import("@monaco-editor/react").then((m) => m.DiffEditor),
   { ssr: false, loading: () => <div className="h-64 bg-muted animate-pulse rounded" /> }
 );
 
-export interface ArtifactData {
-  artifactId: string;
-  taskId?: string;
-  filePath: string;
-  language: string;
-  originalContent?: string;
-  modifiedContent?: string;
-  contentPreview?: string;
-}
-
 interface DiffCardProps {
-  artifact: ArtifactData;
+  artifact: ArtifactItem;
 }
 
 export function DiffCard({ artifact }: DiffCardProps) {
@@ -36,14 +28,13 @@ export function DiffCard({ artifact }: DiffCardProps) {
   const handleOpen = async () => {
     if (!code && artifact.artifactId) {
       try {
-        const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const res = await fetch(`${base}/api/artifacts/${artifact.artifactId}`);
+        const res = await fetch(`${API_BASE}/api/artifacts/${artifact.artifactId}`);
         if (res.ok) {
           const data = await res.json();
           setCode(data.modified_content || "");
         }
       } catch {
-        // use preview
+        console.warn("获取 artifact 内容失败，将使用预览");
       }
     }
     setOpen(true);

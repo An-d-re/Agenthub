@@ -49,8 +49,8 @@ export function MessageList() {
           发送消息开始对话
         </div>
       )}
-      {messages.map((msg, i) => (
-        <MessageBubble key={msg.id || i} message={msg} />
+      {messages.map((msg) => (
+        <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} />
       ))}
 
       {showPlanCard && (

@@ -11,7 +11,7 @@ from app.models.agent import Agent
 from app.models.message import Message
 from app.models.session import SessionAgent
 from app.services.adapters import create_adapter
-from app.services.adapters.base import AgentContext
+from app.services.adapters.base import AgentContext, AgentRole
 
 
 def _utcnow():
@@ -21,7 +21,7 @@ def _utcnow():
 async def run_agent_reply(session_id: str, user_message: str):
     """Find the session's agent, call its adapter, stream result via EventBus."""
     async with async_session() as db:
-        # Get session agents
+        # 获取 session agent 绑定和对话历史（合并两次读取为一次会话）
         result = await db.execute(
             select(SessionAgent).where(SessionAgent.session_id == session_id)
         )
@@ -29,22 +29,12 @@ async def run_agent_reply(session_id: str, user_message: str):
         if not bindings:
             return
 
-        # Single chat: use the first agent
         binding = bindings[0]
         agent = await db.get(Agent, binding.agent_id)
         if not agent:
             return
 
-    # Create adapter
-    adapter = create_adapter(agent.adapter_type)
-    await adapter.initialize({
-        "api_key": None,  # uses settings env var as fallback
-        "model": None,    # uses adapter default
-        "system_prompt": agent.system_prompt or None,
-    })
-
-    # Build context (get recent messages)
-    async with async_session() as db:
+        # 获取对话历史
         result = await db.execute(
             select(Message)
             .where(Message.session_id == session_id)
@@ -54,12 +44,20 @@ async def run_agent_reply(session_id: str, user_message: str):
         history = list(reversed(result.scalars().all()))
         conversation = [
             {"role": m.role if m.role != "agent" else "assistant", "content": m.content}
-            for m in history[:-1]  # exclude the just-saved user message
+            for m in history[:-1]  # 排除刚保存的用户消息
         ]
+
+    # Create adapter
+    adapter = create_adapter(agent.adapter_type)
+    await adapter.initialize({
+        "api_key": None,  # uses settings env var as fallback
+        "model": None,    # uses adapter default
+        "system_prompt": agent.system_prompt or None,
+    })
 
     context = AgentContext(
         session_id=session_id,
-        agent_role="planner",  # default for single chat
+        agent_role=AgentRole.PLANNER,
         conversation_history=conversation,
     )
 

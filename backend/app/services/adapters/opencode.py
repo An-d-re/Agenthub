@@ -24,9 +24,10 @@ class OpenCodeAdapter(DeepSeekAdapter):
 
         if api_key:
             from openai import AsyncOpenAI
+            import httpx
             base_url = config.get("base_url") or settings.opencode_base_url
             self._model = config.get("model") or "opencode"
-            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=httpx.AsyncClient(trust_env=False))
         else:
             logger.warning("OpenCode API key 未配置，降级使用 DeepSeek")
             self._fallback_to_deepseek = True

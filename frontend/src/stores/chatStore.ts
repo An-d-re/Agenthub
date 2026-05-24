@@ -34,6 +34,8 @@ export interface ArtifactItem {
   filePath: string;
   language: string;
   contentPreview?: string;
+  originalContent?: string;
+  modifiedContent?: string;
 }
 
 export interface TraceSpan {
