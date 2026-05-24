@@ -21,6 +21,7 @@ from app.core.database import async_session
 from app.core.event_bus import event_bus
 from app.core.middleware import MiddlewareChain, MiddlewareContext
 from app.core.prompts import (
+from app.core.tracer import tracer
     CODER_TASK_PROMPT,
     CRITIC_SYSTEM_PROMPT,
     PLANNER_APPROACHES_PROMPT,
@@ -406,10 +407,15 @@ class Orchestrator:
 
     async def _execute_single_task(self, db: AsyncSession, plan: Plan, task: Task) -> None:
         """执行单个任务：中间件 → Agent → 标记 done。MVP 跳过 Review。"""
-        # 运行中间件链
+
+        # 获取对话历史供中间件使用
+        conversation_history = await self._get_conversation_history(db)
+
+        # 运行中间件链（ContextSummarizer → LoopDetector → SubagentLimiter）
         mw_ctx = MiddlewareContext(
             session_id=self.session_id,
             task_id=task.id,
+            conversation_history=conversation_history,
             task_payload={"title": task.title, "description": task.description},
         )
         mw_ctx = await self.middleware.run(mw_ctx)
@@ -419,68 +425,87 @@ class Orchestrator:
             await self._send_system_message(db, f"任务「{task.title}」被阻止：{mw_ctx.block_reason}")
             return
 
-        # 获取 Agent
-        agent, adapter = await self._get_agent_adapter(db, task.assigned_agent_id)
-        if not agent or not adapter:
-            task.status = "blocked"
-            task.error_message = "找不到合适的 Agent"
-            await self._send_system_message(db, f"任务「{task.title}」没有可用的 Agent。")
-            return
-
-        # 开始执行
-        task.status = "in_progress"
-        task.started_at = _utcnow()
-        await db.flush()
-        await self._publish_task_update(task, "in_progress")
-
-        # 构建上下文并调用 Agent
-        history = await self._get_conversation_history(db)
-        context = AgentContext(
-            session_id=self.session_id,
-            agent_role=AgentRole.CODER,
-            conversation_history=history,
-            current_task={"id": task.id, "title": task.title, "description": task.description},
-            config={"system_prompt": CODER_TASK_PROMPT},
-        )
-
+        # 获取并发许可
+        await self.middleware.subagent_limiter.acquire(self.session_id)
         try:
-            response = await adapter.execute_task(context, {
-                "id": task.id,
-                "title": task.title,
-                "description": task.description,
-            })
-            task.result = response.content
-            task.status = "done"
-            task.completed_at = _utcnow()
-            await db.flush()
-            await self._publish_task_update(task, "done")
+            # 获取 Agent
+            agent, adapter = await self._get_agent_adapter(db, task.assigned_agent_id)
+            if not agent or not adapter:
+                task.status = "blocked"
+                task.error_message = "找不到合适的 Agent"
+                await self._send_system_message(db, f"任务「{task.title}」没有可用的 Agent。")
+                return
 
-            # 发送结果摘要
-            preview = response.content[:500] + ("…" if len(response.content) > 500 else "")
-            await self._send_system_message(
-                db, f"✅ 任务「{task.title}」完成。\n\n{preview}"
+            # 开始执行
+            task.status = "in_progress"
+            task.started_at = _utcnow()
+            await db.flush()
+            await self._publish_task_update(task, "in_progress")
+
+            # 构建上下文并调用 Agent
+            history = await self._get_conversation_history(db)
+            context = AgentContext(
+                session_id=self.session_id,
+                agent_role=AgentRole.CODER,
+                conversation_history=history,
+                current_task={"id": task.id, "title": task.title, "description": task.description},
+                config={"system_prompt": CODER_TASK_PROMPT},
             )
 
-        except Exception as e:
-            logger.exception("任务执行失败: %s", e)
-            task.error_message = str(e)
+            try:
+                async with tracer.span(
+                    session_id=self.session_id,
+                    operation_name=f"adapter.execute_task",
+                    service_name=adapter.adapter_type,
+                    tags={"task_id": task.id, "task_title": task.title},
+                ) as span:
+                    response = await adapter.execute_task(context, {
+                        "id": task.id,
+                        "title": task.title,
+                        "description": task.description,
+                    })
+                    span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+                task.result = response.content
+                task.status = "done"
+                task.completed_at = _utcnow()
+                await db.flush()
 
-            if task.retry_count < self.MAX_TASK_RETRIES:
-                task.status = "retry"
-                task.retry_count += 1
-                await self._send_system_message(
-                    db, f"任务「{task.title}」失败（第 {task.retry_count} 次尝试）：{e}。正在重试…"
-                )
-                await self._execute_single_task(db, plan, task)
-                return
-            else:
-                task.status = "dispute"
-                await self._send_system_message(
-                    db,
-                    f"❌ 任务「{task.title}」在 {self.MAX_TASK_RETRIES + 1} 次尝试后仍失败：{e}。\n"
-                    "输入「重试」重新执行，或检查 Agent 配置。"
-                )
-                return
+                # 提取代码块 → Artifact
+                artifacts = await self._extract_artifacts(db, task, response.content)
+                await self._publish_task_update(task, "done")
+
+                # 发送结果摘要 + Diff 卡片
+                preview = response.content[:300] + ("…" if len(response.content) > 300 else "")
+                lines = [f"✅ 任务「{task.title}」完成。"]
+                if artifacts:
+                    lines.append(f"\n生成了 {len(artifacts)} 个文件：")
+                    lines.extend(f"  • `{a['file_path']}`" for a in artifacts)
+                else:
+                    lines.append(f"\n{preview}")
+                await self._send_system_message(db, "\n".join(lines))
+
+            except Exception as e:
+                logger.exception("任务执行失败: %s", e)
+                task.error_message = str(e)
+
+                if task.retry_count < self.MAX_TASK_RETRIES:
+                    task.status = "retry"
+                    task.retry_count += 1
+                    await self._send_system_message(
+                        db, f"任务「{task.title}」失败（第 {task.retry_count} 次尝试）：{e}。正在重试…"
+                    )
+                    await self._execute_single_task(db, plan, task)
+                    return
+                else:
+                    task.status = "dispute"
+                    await self._send_system_message(
+                        db,
+                        f"❌ 任务「{task.title}」在 {self.MAX_TASK_RETRIES + 1} 次尝试后仍失败：{e}。\n"
+                        "输入「重试」重新执行，或检查 Agent 配置。"
+                    )
+                    return
+        finally:
+            self.middleware.subagent_limiter.release(self.session_id)
 
         # 检查是否全部完成，继续执行下一个就绪任务
         if not await self._check_all_done(db, plan):
@@ -664,6 +689,117 @@ class Orchestrator:
         except json.JSONDecodeError:
             pass
         return None
+
+    async def _extract_artifacts(
+        self, db: AsyncSession, task: Task, content: str
+    ) -> list[dict]:
+        """从 Agent 输出中提取代码块，创建 Artifact 记录并发布事件。"""
+        from app.models.artifact import Artifact
+        from app.services.adapters.base import AgentResponse
+
+        artifacts: list[dict] = []
+
+        # 匹配 markdown 代码块：```language\n code \n```
+        code_blocks = re.finditer(
+            r'`{3}(\w*)\s*\n(.*?)`{3}', content, re.DOTALL
+        )
+        for match in code_blocks:
+            language = match.group(1) or "text"
+            code = match.group(2).strip()
+            if len(code) < 10:
+                continue
+
+            # 尝试从注释或上下文中提取文件路径
+            file_path = self._guess_file_path(content, code, language)
+
+            artifact = Artifact(
+                task_id=task.id,
+                session_id=self.session_id,
+                file_path=file_path,
+                original_content="",
+                modified_content=code,
+                language=language,
+                artifact_type="code",
+            )
+            db.add(artifact)
+            await db.flush()
+
+            art_data = {
+                "id": artifact.id,
+                "file_path": artifact.file_path,
+                "language": artifact.language,
+                "modified_content": code,
+            }
+            artifacts.append(art_data)
+
+            await event_bus.publish(self.session_id, {
+                "type": "artifact.created",
+                "session_id": self.session_id,
+                "payload": {
+                    "artifact_id": artifact.id,
+                    "task_id": task.id,
+                    "file_path": file_path,
+                    "language": language,
+                    "content_preview": code[:200],
+                },
+            })
+
+        # 如果没有代码块，将整个输出作为一个文档制品
+        if not artifacts and len(content) > 50:
+            artifact = Artifact(
+                task_id=task.id,
+                session_id=self.session_id,
+                file_path=f"output/task-{task.title[:30]}.md",
+                original_content="",
+                modified_content=content,
+                language="markdown",
+                artifact_type="code",
+            )
+            db.add(artifact)
+            await db.flush()
+            art_data = {
+                "id": artifact.id,
+                "file_path": artifact.file_path,
+                "language": "markdown",
+                "modified_content": content,
+            }
+            artifacts.append(art_data)
+
+            await event_bus.publish(self.session_id, {
+                "type": "artifact.created",
+                "session_id": self.session_id,
+                "payload": {
+                    "artifact_id": artifact.id,
+                    "task_id": task.id,
+                    "file_path": artifact.file_path,
+                    "language": "markdown",
+                    "content_preview": content[:200],
+                },
+            })
+
+        return artifacts
+
+    def _guess_file_path(self, full_content: str, code: str, language: str) -> str:
+        """从注释或上下文猜测文件路径。"""
+        # 常见模式: // File: src/xxx.py
+        path_match = re.search(
+            r'(?:File|文件|path):\s*([^\s\n]+)', full_content, re.IGNORECASE
+        )
+        if path_match:
+            return path_match.group(1)
+
+        # 根据语言给默认名
+        ext_map = {
+            "python": "output.py", "py": "output.py",
+            "typescript": "output.ts", "ts": "output.ts",
+            "tsx": "component.tsx", "jsx": "component.jsx",
+            "javascript": "output.js", "js": "output.js",
+            "html": "index.html", "css": "styles.css",
+            "json": "config.json", "yaml": "config.yaml",
+            "sql": "query.sql", "rust": "main.rs",
+            "go": "main.go", "java": "Main.java",
+        }
+        return ext_map.get(language.lower(), f"output.{language or 'txt'}")
 
     async def _parse_approach_selection(
         self, user_message: str, approaches: list[dict]

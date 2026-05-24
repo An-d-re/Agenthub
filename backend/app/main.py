@@ -6,7 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agents import router as agents_router
+from app.api.artifacts import router as artifacts_router
 from app.api.sessions import router as sessions_router
+from app.api.traces import router as traces_router
 from app.core.config import settings
 from app.core.database import init_db
 from app.ws.ws_routes import router as ws_router
@@ -29,7 +31,9 @@ app.add_middleware(
 )
 
 app.include_router(agents_router)
+app.include_router(artifacts_router)
 app.include_router(sessions_router)
+app.include_router(traces_router)
 app.include_router(ws_router)
 
 

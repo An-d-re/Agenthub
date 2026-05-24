@@ -7,6 +7,7 @@
 import logging
 from typing import AsyncIterator
 
+import httpx
 from anthropic import AsyncAnthropic
 
 from app.core.config import settings
@@ -33,7 +34,7 @@ class AnthropicAdapter(BaseAdapter):
             return
 
         self._model = config.get("model") or "claude-sonnet-4-20250514"
-        self._client = AsyncAnthropic(api_key=api_key)
+        self._client = AsyncAnthropic(api_key=api_key, http_client=httpx.AsyncClient(trust_env=False))
 
     async def _get_fallback(self) -> BaseAdapter:
         """获取 DeepSeek 兜底适配器。"""
