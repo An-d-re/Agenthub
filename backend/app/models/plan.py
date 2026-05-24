@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.sqlite import CHAR as UUID
 from sqlalchemy.orm import relationship
 
@@ -16,6 +16,9 @@ def _utcnow():
 
 class Plan(Base):
     __tablename__ = "plans"
+    __table_args__ = (
+        UniqueConstraint("session_id", "status", name="uq_plan_session_active"),
+    )
 
     id = Column(UUID(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id = Column(UUID(36), ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)

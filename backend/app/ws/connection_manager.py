@@ -18,6 +18,7 @@ class ConnectionManager:
         self._connections: dict[str, WebSocket] = {}         # client_id → ws
         self._client_sessions: dict[str, str] = {}            # client_id → session_id
         self._heartbeat_tasks: dict[str, asyncio.Task] = {}
+        self._pong_events: dict[str, asyncio.Event] = {}
 
     # ── lifecycle ──────────────────────────────────────────
 
@@ -57,24 +58,28 @@ class ConnectionManager:
 
     async def _heartbeat_loop(self, client_id: str):
         await asyncio.sleep(self.HEARTBEAT_INTERVAL)
-        ws = self._connections.get(client_id)
-        if not ws:
-            return
-        try:
-            await ws.send_text(json.dumps({"type": "ping", "timestamp": ""}))
-            await asyncio.wait_for(self._wait_pong(client_id), timeout=self.HEARTBEAT_TIMEOUT)
-        except (asyncio.TimeoutError, WebSocketDisconnect, Exception):
-            self.disconnect(client_id)
+        while client_id in self._connections:
+            ws = self._connections.get(client_id)
+            if not ws:
+                return
+            try:
+                await ws.send_text(json.dumps({"type": "ping", "timestamp": ""}))
+                # 等待 pong 响应，超时则断开
+                pong_event = asyncio.Event()
+                self._pong_events[client_id] = pong_event
+                await asyncio.wait_for(pong_event.wait(), timeout=self.HEARTBEAT_TIMEOUT)
+            except (asyncio.TimeoutError, WebSocketDisconnect, Exception):
+                self.disconnect(client_id)
+                return
+            finally:
+                self._pong_events.pop(client_id, None)
+            await asyncio.sleep(self.HEARTBEAT_INTERVAL)
 
-    async def _wait_pong(self, client_id: str):
-        """Subclasses or routes should call handle_pong to clear this."""
-        pass
-
-    async def handle_pong(self, client_id: str):
-        """Called from WS route when client sends 'pong'. Resets heartbeat."""
-        if client_id in self._heartbeat_tasks:
-            self._heartbeat_tasks[client_id].cancel()
-            self._heartbeat_tasks[client_id] = asyncio.create_task(self._heartbeat_loop(client_id))
+    def handle_pong(self, client_id: str):
+        """客户端回复 ping 时调用，重置心跳计时器。"""
+        pong_event = self._pong_events.get(client_id)
+        if pong_event:
+            pong_event.set()
 
 
 manager = ConnectionManager()

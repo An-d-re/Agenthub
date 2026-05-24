@@ -27,7 +27,7 @@ class Task(Base):
     round = Column(Integer, default=1)
     priority = Column(Integer, default=0)
     retry_count = Column(Integer, default=0)
-    max_retries = Column(Integer, default=3)
+    max_retries = Column(Integer, default=1)
     result = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)

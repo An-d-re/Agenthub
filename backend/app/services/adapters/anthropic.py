@@ -81,9 +81,10 @@ class AnthropicAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("Anthropic send_message 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -114,9 +115,10 @@ class AnthropicAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("Anthropic stream_message 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -153,9 +155,10 @@ class AnthropicAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("Anthropic execute_task 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 
@@ -194,9 +197,10 @@ class AnthropicAdapter(BaseAdapter):
 
             except Exception as e:
                 logger.warning("Anthropic review_result 第 %d 次尝试失败: %s", attempt + 1, e)
-                if attempt < len(RETRY_DELAYS) - 1 and self._is_retryable(e):
-                    import asyncio
-                    await asyncio.sleep(delay)
+                if self._is_retryable(e):
+                    if attempt < len(RETRY_DELAYS) - 1:
+                        import asyncio
+                        await asyncio.sleep(delay)
                 else:
                     raise
 

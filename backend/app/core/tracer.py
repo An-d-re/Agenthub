@@ -63,8 +63,6 @@ class Tracer:
                         parent_span_id=parent_span_id,
                         operation_name=operation_name,
                         service_name=service_name,
-                        start_time=None,  # SQLite 默认 now
-                        end_time=None,
                         duration_ms=duration_ms,
                         status=span_data["status"],
                         tags=span_data["tags"],

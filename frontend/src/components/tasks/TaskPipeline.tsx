@@ -5,7 +5,7 @@ import { EMPTY_ARRAY } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const STATUS_CONFIG: Record<string, { label: string; dotClass: string; textColor: string }> = {
-  done: { label: "完成", dotClass: "bg-green-500", textColor: "#22c55e" },
+  done: { label: "完成", dotClass: "bg-orange-500", textColor: "#f97316" },
   in_progress: { label: "执行中", dotClass: "bg-blue-500", textColor: "#3b82f6" },
   review: { label: "审查中", dotClass: "bg-amber-500", textColor: "#f59e0b" },
   retry: { label: "重试", dotClass: "bg-orange-500", textColor: "#f97316" },

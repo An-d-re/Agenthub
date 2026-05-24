@@ -5,6 +5,7 @@
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -100,7 +101,6 @@ class ContextSummarizer(BaseMiddleware):
             # 探测文件产出
             if "```" in content or "file:" in lower or "文件" in lower:
                 # 提取文件名
-                import re
                 paths = re.findall(r'`([^`]+\.\w+)`', content)
                 files.extend(paths[:3])
 
