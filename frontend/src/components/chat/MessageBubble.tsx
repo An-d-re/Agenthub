@@ -2,27 +2,35 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/stores/chatStore";
 
-interface Props { message: ChatMessage; }
+interface Props { message: ChatMessage; index?: number; }
 
-export function MessageBubble({ message }: Props) {
+const bubbleSpring = {
+  initial: { opacity: 0, y: 12, scale: 0.97 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  transition: { type: "spring" as const, stiffness: 400, damping: 30 },
+};
+
+export function MessageBubble({ message, index = 0 }: Props) {
   if (message.role === "system") {
     return (
-      <div className="flex justify-center w-full my-2 animate-slide-up">
+      <motion.div {...bubbleSpring} transition={{ ...bubbleSpring.transition, delay: index * 0.03 }}
+        className="flex justify-center w-full my-2">
         <div className="max-w-[70%] text-center text-[12px] text-[#86868B] bg-[#F0F0F5] px-5 py-2 rounded-2xl">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   const isUser = message.role === "user";
 
   return (
-    <div className={cn("flex w-full mb-1.5 px-6 gap-3 animate-slide-up", isUser ? "flex-row-reverse" : "flex-row")}>
-      {/* Avatar */}
+    <motion.div {...bubbleSpring} transition={{ ...bubbleSpring.transition, delay: index * 0.03 }}
+      className={cn("flex w-full mb-1.5 px-6 gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
       <div className={cn(
         "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
         isUser ? "bg-[#007AFF]/10" : "bg-[#F5F5F7]"
@@ -34,7 +42,6 @@ export function MessageBubble({ message }: Props) {
         )}
       </div>
 
-      {/* Bubble */}
       <div className={cn("max-w-[65%] flex flex-col", isUser ? "items-end" : "items-start")}>
         {!isUser && (
           <span className="text-[12px] font-semibold text-[#86868B] mb-1 ml-1">Agent</span>
@@ -50,6 +57,6 @@ export function MessageBubble({ message }: Props) {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

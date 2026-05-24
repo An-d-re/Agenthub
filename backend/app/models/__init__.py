@@ -4,6 +4,7 @@ from app.core.database import Base
 
 from app.models.agent import Agent
 from app.models.artifact import Artifact
+from app.models.deployment import Deployment
 from app.models.message import Message, PinnedMessage
 from app.models.plan import Plan
 from app.models.session import Session, SessionAgent
@@ -15,6 +16,7 @@ __all__ = [
     "Base",
     "Agent",
     "Artifact",
+    "Deployment",
     "Message",
     "PinnedMessage",
     "Plan",

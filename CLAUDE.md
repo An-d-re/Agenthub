@@ -118,12 +118,28 @@ WS 信封：`{type, session_id, payload}`
 - ✅ 基础设施（DB/REST/WS/适配器）
 - ✅ 前端（三栏布局，Apple 浅色主题，自建 Agent，会话删除）
 - ✅ Orchestrator 四阶段 + 中间件链
-- ✅ Trace 埋点 + TracePanel
+- ✅ Trace 埋点 + TracePanel（Jaeger 风格瀑布图，按服务过滤，trace 选择器）
 - ✅ Diff 卡片 + Monaco DiffEditor + Plan 方案选择卡片
 - ✅ TaskPipeline 面板
-- ❌ Reviewer + 反驳机制（MVP 跳过）
-- ❌ 并行任务执行（当前逐个）
+- ✅ @Mention Agent 选择（前端下拉 + 后端解析）
+- ✅ 并行任务执行（asyncio.gather + 独立 DB session，SubagentLimiter 控制并发 ≤3）
+- ✅ Reviewer 审查机制（任务完成后自动调用 reviewer，不通过回退重试）
+- ✅ Web Preview（iframe sandbox + 设备尺寸切换）
+- ✅ 一键部署（POST /api/deployments → 静态文件服务 → 访问 URL）
+- ✅ Docker Compose（backend + frontend 独立容器）
+- ✅ CodexAdapter 预留桩
+- ✅ framer-motion 动画（MessageBubble spring-in 级联效果）
 - ❌ 文件上传
+
+## Docker 部署
+
+```bash
+docker-compose up --build
+# Backend: http://localhost:8000 (API docs: /docs)
+# Frontend: http://localhost:3000
+```
+
+SQLite 数据挂载到 `./backend/data`，`.env` 通过 `docker-compose.yml` readonly mount 注入。
 
 ## 冒烟测试
 

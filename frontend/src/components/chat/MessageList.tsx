@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { DiffCard } from "@/components/cards/DiffCard";
 import { PlanCard } from "@/components/cards/PlanCard";
+import { PreviewCard } from "@/components/cards/PreviewCard";
 import { EMPTY_ARRAY } from "@/lib/constants";
 import { MessageBubble } from "./MessageBubble";
 
@@ -45,8 +46,8 @@ export function MessageList() {
           发送消息开始对话
         </div>
       )}
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} />
+      {messages.map((msg, i) => (
+        <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} />
       ))}
 
       {showPlanCard && (
@@ -56,9 +57,13 @@ export function MessageList() {
         />
       )}
 
-      {artifacts.map((a) => (
-        <DiffCard key={a.artifactId} artifact={a} />
-      ))}
+      {artifacts.map((a) =>
+        a.language === "html" ? (
+          <PreviewCard key={a.artifactId} artifact={a} />
+        ) : (
+          <DiffCard key={a.artifactId} artifact={a} />
+        )
+      )}
 
       <div ref={bottomRef} />
     </div>

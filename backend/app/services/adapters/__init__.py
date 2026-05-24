@@ -2,12 +2,14 @@
 
 from app.services.adapters.anthropic import AnthropicAdapter
 from app.services.adapters.base import BaseAdapter
+from app.services.adapters.codex import CodexAdapter
 from app.services.adapters.deepseek import DeepSeekAdapter
 from app.services.adapters.opencode import OpenCodeAdapter
 
 ADAPTER_REGISTRY: dict[str, type[BaseAdapter]] = {
     "deepseek": DeepSeekAdapter,
     "anthropic": AnthropicAdapter,
+    "codex": CodexAdapter,
     "opencode": OpenCodeAdapter,
 }
 
