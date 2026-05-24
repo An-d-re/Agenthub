@@ -1,28 +1,46 @@
-"""OpenCode adapter via OpenAI-compatible HTTP API."""
+"""OpenCode 适配器 —— 字节系第二 Agent，走 OpenAI 兼容协议。
 
-from openai import AsyncOpenAI
+继承 DeepSeekAdapter。如果 OpenCode API key 未配置，自动降级为 DeepSeek。
+"""
+
+import logging
 
 from app.core.config import settings
 from app.services.adapters.deepseek import DeepSeekAdapter
 
+logger = logging.getLogger(__name__)
+
 
 class OpenCodeAdapter(DeepSeekAdapter):
-    """OpenCode is OpenAI-compatible; reuse DeepSeekAdapter implementation."""
-
     adapter_type = "opencode"
 
+    def __init__(self):
+        super().__init__()
+        self._fallback_to_deepseek: bool = False
+
     async def initialize(self, config: dict) -> None:
-        self.model = config.get("model", "opencode-default")
-        self.temperature = config.get("temperature", 0.7)
-        self.max_tokens = config.get("max_tokens", 4096)
-        self.system_prompt = config.get("system_prompt", "You are OpenCode, a lightweight coding assistant.")
-        api_key = config.get("api_key", settings.opencode_api_key)
-        base_url = config.get("base_url", settings.opencode_base_url)
-        self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        """如果 OpenCode key 未配置，降级使用 DeepSeek。"""
+        api_key = config.get("api_key") or settings.opencode_api_key
+
+        if api_key:
+            from openai import AsyncOpenAI
+            base_url = config.get("base_url") or settings.opencode_base_url
+            self._model = config.get("model") or "opencode"
+            self._client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        else:
+            logger.warning("OpenCode API key 未配置，降级使用 DeepSeek")
+            self._fallback_to_deepseek = True
+            # 调用父类初始化（使用 DeepSeek 配置）
+            await super().initialize({
+                "api_key": settings.deepseek_api_key,
+                "base_url": settings.deepseek_base_url,
+                "model": "deepseek-chat",
+            })
 
     async def get_capabilities(self) -> dict:
         return {
             "adapter_type": "opencode",
+            "model": self._model,
             "supports_streaming": True,
-            "model": self.model,
+            "fallback_to_deepseek": self._fallback_to_deepseek,
         }

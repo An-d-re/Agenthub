@@ -1,7 +1,7 @@
-"""WebSocket route handler — dual async task pattern.
+"""WebSocket 路由处理 —— 双异步任务模式。
 
-Task A: read from WebSocket → validate → persist → publish to EventBus
-Task B: read from EventBus queue → send to WebSocket
+任务 A：从 WebSocket 读取 → 校验 → 持久化 → 发布到 EventBus → 触发 Agent/Orchestrator
+任务 B：从 EventBus 队列读取 → 发送到 WebSocket 客户端
 """
 
 import asyncio
@@ -112,12 +112,19 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
         }
         await event_bus.publish(session_id, msg_data)
 
-    # Trigger agent reply in background
-    asyncio.create_task(_trigger_agent(session_id, content))
+        # 记录 session 类型，用于 with 块外的分发
+        session_type = session.type if session else "single"
+
+    # 根据会话类型分发：群聊走 Orchestrator，单聊走 Agent Runner
+    if session_type == "group":
+        from app.core.orchestrator import Orchestrator
+        asyncio.create_task(Orchestrator(session_id).handle_message(content))
+    else:
+        asyncio.create_task(_trigger_agent(session_id, content))
 
 
 async def _trigger_agent(session_id: str, content: str):
-    """Fire-and-forget agent reply."""
+    """单聊模式：调用 Agent Runner 获取回复（fire-and-forget）。"""
     from app.services.agent_runner import run_agent_reply
     try:
         await run_agent_reply(session_id, content)
