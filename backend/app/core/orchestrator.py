@@ -25,6 +25,7 @@ from app.core.prompts import (
     CRITIC_SYSTEM_PROMPT,
     PLANNER_APPROACHES_PROMPT,
     PLANNER_DECOMPOSE_PROMPT,
+    REVIEWER_PROMPT_PREFIX,
 )
 from app.core.tracer import tracer
 from app.models.agent import Agent
@@ -59,15 +60,16 @@ class Orchestrator:
 
     # ── 公开入口 ──────────────────────────────────────────────
 
-    async def handle_message(self, user_message: str) -> None:
+    async def handle_message(self, user_message: str, mentions: Optional[list[str]] = None) -> None:
         """处理一条用户消息。由 ws_routes.py 通过 create_task 调用。"""
         # 按 session 加锁，防止并发消息导致 Plan 状态竞态
         lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
         async with lock:
-            await self._handle_message_locked(user_message)
+            await self._handle_message_locked(user_message, mentions or [])
 
-    async def _handle_message_locked(self, user_message: str) -> None:
+    async def _handle_message_locked(self, user_message: str, mentions: list[str]) -> None:
         """在 session 锁保护下处理消息。"""
+        self._mentions = mentions  # 存储供 _get_agent_for_role 使用
         try:
             async with async_session() as db:
                 plan = await self._get_or_create_active_plan(db)
@@ -397,23 +399,18 @@ class Orchestrator:
     async def _execute_ready_tasks(
         self, db: AsyncSession, plan: Plan, id_map: dict[str, str]
     ) -> None:
-        """找到所有依赖已满足的 pending 任务，逐个执行。"""
+        """找到所有依赖已满足的 pending 任务，并行执行。最多 3 并发（SubagentLimiter 信号量控制）。"""
         task_dag = plan.task_dag or []
 
-        # 获取所有任务状态
         result = await db.execute(select(Task.id, Task.status).where(Task.plan_id == plan.id))
         statuses = {str(row[0]): row[1] for row in result.all()}
 
+        ready: list[tuple[dict, str]] = []
         for td in task_dag:
             task_id = id_map.get(td["id"])
-            if not task_id:
+            if not task_id or statuses.get(task_id) != "pending":
                 continue
 
-            task = await db.get(Task, task_id)
-            if not task or task.status != "pending":
-                continue
-
-            # 检查依赖
             deps_met = True
             for dep_dag_id in td.get("dependencies", []):
                 dep_db_id = id_map.get(dep_dag_id)
@@ -422,8 +419,28 @@ class Orchestrator:
                     break
 
             if deps_met:
-                await self._execute_single_task(db, plan, task)
-                return  # MVP：一轮执行一个任务
+                ready.append((td, task_id))
+
+        if not ready:
+            return
+
+        logger.info("并行执行 %d 个就绪任务", len(ready))
+
+        async def run_one(task_id: str) -> None:
+            """在独立的 DB session 中执行一个任务。"""
+            async with async_session() as task_db:
+                task = await task_db.get(Task, task_id)
+                task_plan = await task_db.get(Plan, plan.id)
+                if task and task_plan and task.status == "pending":
+                    await self._execute_single_task(task_db, task_plan, task)
+                await task_db.commit()
+            await self._flush_pending_events()
+
+        await asyncio.gather(*[run_one(tid) for _, tid in ready])
+
+        # 用主 session 检查是否全部完成，继续下一批
+        if not await self._check_all_done(db, plan):
+            await self._execute_ready_tasks_from_db(db, plan)
 
     async def _execute_single_task(self, db: AsyncSession, plan: Plan, task: Task) -> None:
         """执行单个任务：中间件 → Agent → 标记 done。MVP 跳过 Review。"""
@@ -494,6 +511,13 @@ class Orchestrator:
                 artifacts = await self._extract_artifacts(db, task, response.content)
                 await self._publish_task_update(task, "done")
 
+                # Reviewer 审查
+                reviewed = await self._review_task_output(db, task, response.content)
+                if not reviewed:
+                    # 审查不通过 → 回退重试（已在 _review_task_output 中更新状态）
+                    await self._execute_single_task(db, plan, task)
+                    return
+
                 # 发送结果摘要 + Diff 卡片
                 preview = response.content[:300] + ("…" if len(response.content) > 300 else "")
                 lines = [f"✅ 任务「{task.title}」完成。"]
@@ -532,10 +556,6 @@ class Orchestrator:
                     logger.exception("关闭适配器失败: %s", adapter.adapter_type)
             self.middleware.subagent_limiter.release(self.session_id)
 
-        # 检查是否全部完成，继续执行下一个就绪任务
-        if not await self._check_all_done(db, plan):
-            await self._execute_ready_tasks_from_db(db, plan)
-
     # ── 辅助方法 ──────────────────────────────────────────────
 
     async def _get_or_create_active_plan(self, db: AsyncSession) -> Optional[Plan]:
@@ -563,18 +583,65 @@ class Orchestrator:
         )
         return [b.agent_id for b in result.scalars().all()]
 
+    # 角色关键词 → 标准角色名映射
+    ROLE_KEYWORDS = {
+        "critic": "critic", "planner": "planner", "coder": "coder",
+        "reviewer": "reviewer", "architect": "planner",
+        "审核": "reviewer", "审查": "reviewer", "规划": "planner",
+        "编程": "coder", "写代码": "coder", "评论": "critic",
+    }
+
     async def _get_agent_for_role(
         self, db: AsyncSession, role: str
     ) -> tuple[Optional[Agent], Optional[BaseAdapter]]:
-        """根据角色选择合适的 Agent。MVP 用简单的索引策略：
-        critic/planner → 第 1 个
-        coder → 第 2 个（如只有 1 个则用第 1 个）
-        reviewer → 第 3 个（不够则用第 1 个）
+        """根据角色选择合适的 Agent。
+
+        优先使用 @mention 指定的 Agent：
+        - 如果 mention 名字匹配某个 role 关键词 → 用 mention 名字解析到的 agent
+        - 否则回退到索引策略
         """
         agent_ids = await self._get_session_agent_ids(db)
         if not agent_ids:
             return None, None
 
+        # 先尝试从 @mentions 中解析角色
+        mentions = getattr(self, "_mentions", []) or []
+        target_role_keywords = {role}  # e.g. {"coder"}
+        # 添加映射到此角色的其他关键词
+        for kw, r in self.ROLE_KEYWORDS.items():
+            if r == role:
+                target_role_keywords.add(kw)
+
+        # 查找 mention 中匹配当前角色的关键词
+        mention_to_role: dict[str, str] = {}
+        for m in mentions:
+            ml = m.lower()
+            for kw, r in self.ROLE_KEYWORDS.items():
+                if kw in ml:
+                    mention_to_role[m] = r
+                    break
+
+        # 如果当前角色被某个 mention 指定了，找到对应的 agent
+        for m_name, m_role in mention_to_role.items():
+            if m_role == role:
+                # 按名字匹配 session agent
+                for aid in agent_ids:
+                    agent = await db.get(Agent, aid)
+                    if agent and (agent.name == m_name or agent.name.lower() in m_name.lower()):
+                        return await self._get_agent_adapter(db, aid)
+                # 如果名字没匹配到，但角色匹配了，尝试索引
+                break
+
+        # 对于没有通过 @mention 匹配到的 mention，尝试直接按名字匹配 agent
+        for m in mentions:
+            for aid in agent_ids:
+                agent = await db.get(Agent, aid)
+                if agent and agent.name == m:
+                    # 此 mention 按名字匹配到 agent，检查是否适合当前角色
+                    if role in ("critic", "planner"):
+                        return await self._get_agent_adapter(db, aid)
+
+        # 回退：索引策略
         index_map = {
             "critic": 0,
             "planner": 0,
@@ -867,6 +934,50 @@ class Orchestrator:
             "go": "main.go", "java": "Main.java",
         }
         return ext_map.get(language.lower(), f"output.{language or 'txt'}")
+
+    async def _review_task_output(
+        self, db: AsyncSession, task: Task, output: str
+    ) -> bool:
+        """调用 Reviewer Agent 审查任务输出。返回 True 表示通过。"""
+        reviewer_agent, reviewer_adapter = await self._get_agent_for_role(db, "reviewer")
+        if not reviewer_agent or not reviewer_adapter:
+            return True  # 无 reviewer 则默认通过
+
+        try:
+            review_ctx = AgentContext(
+                session_id=self.session_id,
+                agent_role=AgentRole.REVIEWER,
+                current_task={"id": task.id, "title": task.title, "description": task.description or ""},
+                config={"system_prompt": REVIEWER_PROMPT_PREFIX},
+            )
+            review_input = (
+                f"Task: {task.title}\n"
+                f"Description: {task.description or 'N/A'}\n\n"
+                f"Code output to review:\n\n{output[:4000]}"
+            )
+            review_resp = await reviewer_adapter.send_message(review_ctx, review_input)
+            review_data = self._extract_json(review_resp.content)
+
+            if review_data and not review_data.get("passed", True):
+                task.status = "retry"
+                task.retry_count += 1
+                task.error_message = review_data.get("feedback", "")
+                await db.flush()
+                await self._publish_task_update(task, "retry")
+                await self._send_system_message(
+                    db,
+                    f"🔍 Reviewer: {review_data.get('feedback', '审查未通过')}\n"
+                    f"📝 建议: {review_data.get('suggested_changes', '')[:300]}"
+                )
+                return False
+        except Exception as e:
+            logger.warning("Reviewer 调用失败，跳过审查: %s", e)
+        finally:
+            try:
+                await reviewer_adapter.stop()
+            except Exception:
+                pass
+        return True
 
     async def _parse_approach_selection(
         self, user_message: str, approaches: list[dict]

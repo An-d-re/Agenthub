@@ -116,10 +116,14 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
         # 记录 session 类型，用于 with 块外的分发
         session_type = session.type if session else "single"
 
+    # 解析 @mentions
+    import re as _re
+    mentions = _re.findall(r'@([^\s@]+)', content)
+
     # 根据会话类型分发：群聊走 Orchestrator，单聊走 Agent Runner
     if session_type == "group":
         from app.core.orchestrator import Orchestrator
-        asyncio.create_task(Orchestrator(session_id).handle_message(content))
+        asyncio.create_task(Orchestrator(session_id).handle_message(content, mentions=mentions))
     else:
         asyncio.create_task(_trigger_agent(session_id, content))
 

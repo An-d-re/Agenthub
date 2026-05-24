@@ -49,7 +49,8 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f' {d[\\\\\"name\\\\\"]} \\({d[\\\\\"id\\\\\"][:8]}\\)'\\)\" echo \"=== Sessions ===\" curl -s http://localhost:8000/api/sessions)",
       "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f' {len\\(data\\)} sessions'\\)\" echo \"=== Backend OK ===\")",
       "Bash(python -c \"import sys,json; agents=json.load\\(sys.stdin\\); print\\(f'{len\\(agents\\)} agents'\\) if agents else print\\('0 agents'\\)\")",
-      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data\\)} sessions'\\)\")"
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data\\)} sessions'\\)\")",
+      "Bash(python -c \"from app.core.orchestrator import Orchestrator; print\\('Backend OK'\\)\")"
     ]
   }
 }
