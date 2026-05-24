@@ -25,11 +25,7 @@ export function MessageList() {
   }, [messages, plan]);
 
   const handleSelectApproach = (approach: { name: string }) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ws = (window as any).__agenthub_ws_send;
-    if (ws) {
-      ws(approach.name);
-    }
+    useChatStore.getState().setPendingSend(approach.name);
   };
 
   if (!activeSessionId) {

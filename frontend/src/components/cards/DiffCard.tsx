@@ -14,7 +14,7 @@ import { API_BASE } from "@/lib/constants";
 
 const MonacoDiff = dynamic(
   () => import("@monaco-editor/react").then((m) => m.DiffEditor),
-  { ssr: false, loading: () => <div className="h-64 bg-muted animate-pulse rounded" /> }
+  { ssr: false, loading: () => <div className="h-64 bg-[#F5F5F7] animate-skeleton rounded-xl" /> }
 );
 
 interface DiffCardProps {

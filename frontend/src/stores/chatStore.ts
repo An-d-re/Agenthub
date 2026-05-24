@@ -76,7 +76,9 @@ interface ChatState {
   artifacts: Record<string, ArtifactItem[]>;  // sessionId → artifacts
   connectionStatus: "disconnected" | "connecting" | "connected";
 
+  selectedContactId: string | null;
   setSessions: (sessions: SessionItem[]) => void;
+  setSelectedContact: (id: string | null) => void;
   setActiveSession: (id: string) => void;
   addMessage: (sessionId: string, msg: ChatMessage) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -86,6 +88,8 @@ interface ChatState {
   upsertTask: (sessionId: string, task: TaskItem) => void;
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
   addArtifact: (sessionId: string, artifact: ArtifactItem) => void;
+  pendingSend: string | null;
+  setPendingSend: (msg: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -96,8 +100,11 @@ export const useChatStore = create<ChatState>((set) => ({
   tasks: {},
   artifacts: {},
   connectionStatus: "disconnected",
+  selectedContactId: null,
+  pendingSend: null,
 
   setSessions: (sessions) => set({ sessions }),
+  setSelectedContact: (id) => set({ selectedContactId: id }),
   setActiveSession: (id) => set({ activeSessionId: id }),
 
   addMessage: (sessionId, msg) =>
@@ -155,4 +162,6 @@ export const useChatStore = create<ChatState>((set) => ({
         [sessionId]: [...(state.artifacts[sessionId] || []), artifact],
       },
     })),
+
+  setPendingSend: (msg) => set({ pendingSend: msg }),
 }));

@@ -37,7 +37,19 @@
       "Bash(python -c \"from app.api.artifacts import router; print\\('Artifact API OK'\\)\")",
       "Bash(python -c \"from app.core.orchestrator import Orchestrator; print\\('Orchestrator+Middleware OK'\\)\")",
       "Bash(python -c \"from app.core.tracer import tracer; print\\('Tracer OK'\\)\")",
-      "Bash(python -c \"import sys,json; [print\\(a['name'], type\\(a.get\\('capability_tags'\\)\\), a.get\\('capability_tags'\\)\\) for a in json.load\\(sys.stdin\\)]\")"
+      "Bash(python -c \"import sys,json; [print\\(a['name'], type\\(a.get\\('capability_tags'\\)\\), a.get\\('capability_tags'\\)\\) for a in json.load\\(sys.stdin\\)]\")",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(python -c \"import sys,json; [print\\(f'  {a[\\\\\"name\\\\\"]} \\({a[\\\\\"adapter_type\\\\\"]}\\)'\\) for a in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -s http://localhost:8000/api/sessions)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'  {len\\(data\\)} sessions'\\) if data else print\\('  0 sessions'\\)\")",
+      "Bash(mkdir -p \"C:/Users/xlx/projects/agent_hub/backend/data\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d '{\"name\":\"DeepSeek\",\"role_type\":\"system\",\"adapter_type\":\"deepseek\",\"capability_tags\":[\"chat\",\"reasoning\"]}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f' {d[\\\\\"name\\\\\"]} \\({d[\\\\\"id\\\\\"][:8]}\\)'\\)\" curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d '{\"name\":\"Claude\",\"role_type\":\"system\",\"adapter_type\":\"anthropic\",\"capability_tags\":[\"code\",\"refactor\"]}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f' {d[\\\\\"name\\\\\"]} \\({d[\\\\\"id\\\\\"][:8]}\\)'\\)\" curl -s -X POST http://localhost:8000/api/agents -H \"Content-Type: application/json\" -d '{\"name\":\"OpenCode\",\"role_type\":\"system\",\"adapter_type\":\"opencode\",\"capability_tags\":[\"coding\",\"web\"]}')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f' {d[\\\\\"name\\\\\"]} \\({d[\\\\\"id\\\\\"][:8]}\\)'\\)\" echo \"=== Sessions ===\" curl -s http://localhost:8000/api/sessions)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f' {len\\(data\\)} sessions'\\)\" echo \"=== Backend OK ===\")",
+      "Bash(python -c \"import sys,json; agents=json.load\\(sys.stdin\\); print\\(f'{len\\(agents\\)} agents'\\) if agents else print\\('0 agents'\\)\")",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data\\)} sessions'\\)\")"
     ]
   }
 }

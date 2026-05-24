@@ -1,57 +1,42 @@
 "use client";
 
 import { useState } from "react";
-import { Textarea } from "@/components/ui/textarea";
 
-interface Props {
-  onSend: (content: string) => void;
-  disabled?: boolean;
-}
+interface Props { onSend: (content: string) => void; disabled?: boolean; }
 
 export function MessageInput({ onSend, disabled }: Props) {
   const [text, setText] = useState("");
 
-  const handleSend = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onSend(trimmed);
+  const send = () => {
+    const t = text.trim();
+    if (!t) return;
+    onSend(t);
     setText("");
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const canSend = !disabled && text.trim().length > 0;
-
   return (
-    <div className="border-t border-border/50 p-4">
-      <div className="flex gap-2 items-end bg-muted/50 rounded-lg border border-border/50 focus-within:border-orange-500/30 focus-within:ring-1 focus-within:ring-orange-500/20 transition-all duration-200 p-1">
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="输入消息... Enter 发送 / Shift+Enter 换行"
-          className="min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-sm"
-          rows={1}
-          disabled={disabled}
+    <div className="px-4 pb-4 pt-2 shrink-0">
+      <div className="flex items-end gap-2 bg-[#F5F5F7] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[#007AFF]/20 focus-within:bg-white transition-all duration-200">
+        {/* + button */}
+        <button className="w-8 h-8 rounded-full flex items-center justify-center text-[#007AFF] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5" disabled={disabled}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <textarea
+          value={text} onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();} }}
+          placeholder="输入消息，@ 选择 Agent"
+          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[#C7C7CC] leading-relaxed py-1.5"
+          rows={1} disabled={disabled}
         />
         <button
-          onClick={handleSend}
-          disabled={!canSend}
-          className="shrink-0 mb-1 mr-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150
-            bg-orange-500 text-white hover:bg-orange-600 active:scale-95
-            disabled:opacity-30 disabled:cursor-not-allowed disabled:active:scale-100"
+          onClick={send}
+          disabled={disabled || !text.trim()}
+          className="w-8 h-8 rounded-full bg-[#007AFF] text-white flex items-center justify-center transition-all duration-150 hover:bg-[#0066D6] active:scale-90 disabled:opacity-30 disabled:active:scale-100 shrink-0 mb-0.5"
         >
-          发送
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
-      <div className="mt-1.5 text-[10px] text-muted-foreground text-right">
-        Enter 发送 · Shift+Enter 换行
-      </div>
+      <div className="text-[11px] text-[#C7C7CC] text-center mt-1.5">Enter 发送 · Shift+Enter 换行</div>
     </div>
   );
 }

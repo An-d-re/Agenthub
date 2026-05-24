@@ -80,7 +80,6 @@ export function ResizablePanel({
   }, [handleSide, maxWidth, minWidth, onWidthChange]);
 
   const handlePosition = handleSide === "right" ? "right-0" : "left-0";
-  const handleCursor = handleSide === "right" ? "right-1" : "left-1";
 
   return (
     <div className={cn("relative shrink-0", className)} style={{ width }}>

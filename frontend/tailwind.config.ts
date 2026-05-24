@@ -1,51 +1,29 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  content: [
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  content: ["./src/components/**/*.{js,ts,jsx,tsx,mdx}","./src/app/**/*.{js,ts,jsx,tsx,mdx}"],
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
-        card: {
-          DEFAULT: "var(--card)",
-          foreground: "var(--card-foreground)",
-        },
-        muted: {
-          DEFAULT: "var(--muted)",
-          foreground: "var(--muted-foreground)",
-        },
-        primary: {
-          DEFAULT: "var(--primary)",
-          foreground: "var(--primary-foreground)",
-        },
-        secondary: {
-          DEFAULT: "var(--secondary)",
-          foreground: "var(--secondary-foreground)",
-        },
-        accent: {
-          DEFAULT: "var(--accent)",
-          foreground: "var(--accent-foreground)",
-        },
-        destructive: {
-          DEFAULT: "var(--destructive)",
-          foreground: "var(--destructive-foreground)",
-        },
-        border: "var(--border)",
-        ring: "var(--ring)",
-        input: "var(--border)",
-        popover: {
-          DEFAULT: "var(--popover)",
-          foreground: "var(--popover-foreground)",
-        },
+        background: "#FFFFFF",
+        foreground: "#1D1D1F",
+        card: { DEFAULT: "#FFFFFF", foreground: "#1D1D1F" },
+        muted: { DEFAULT: "#F5F5F7", foreground: "#86868B" },
+        primary: { DEFAULT: "#1D1D1F", foreground: "#FFFFFF" },
+        secondary: { DEFAULT: "#F5F5F7", foreground: "#1D1D1F" },
+        accent: { DEFAULT: "#007AFF", foreground: "#FFFFFF" },
+        destructive: { DEFAULT: "#FF3B30", foreground: "#FFFFFF" },
+        border: "#E5E5E7",
+        ring: "#007AFF",
+        input: "#E5E5E7",
+        popover: { DEFAULT: "#FFFFFF", foreground: "#1D1D1F" },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "16px", md: "12px", sm: "8px",
+      },
+      fontFamily: {
+        sans: ['-apple-system','BlinkMacSystemFont','"SF Pro Display"','"SF Pro Text"','"PingFang SC"','"Helvetica Neue"','system-ui','sans-serif'],
+        mono: ['"SF Mono"','"JetBrains Mono"','"Fira Code"','ui-monospace','monospace'],
       },
     },
   },
