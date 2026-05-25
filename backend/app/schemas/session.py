@@ -43,3 +43,4 @@ class SessionListItem(BaseModel):
     last_active_at: Optional[datetime] = None
     last_message_preview: str = ""
     agent_count: int = 0
+    agent_ids: list[str] = []

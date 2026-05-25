@@ -61,7 +61,9 @@
       "Bash(pip install *)",
       "Bash(git fetch *)",
       "Bash(git pull *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(python -c \"import os; os.remove\\(r'C:\\\\Users\\\\xlx\\\\projects\\\\agent_hub\\\\backend\\\\data\\\\agenthub.db'\\)\")",
+      "Bash(python *)"
     ]
   }
 }

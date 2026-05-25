@@ -22,6 +22,7 @@ export interface SessionItem {
   type: string;
   status: string;
   agentCount: number;
+  agentIds: string[];
   lastMessagePreview: string;
 }
 

@@ -31,6 +31,7 @@ def _session_to_item(s: Session, last_msg: str = "") -> SessionListItem:
         last_active_at=s.last_active_at,
         last_message_preview=last_msg,
         agent_count=len(s.agents) if s.agents else 0,
+        agent_ids=[a.agent_id for a in s.agents] if s.agents else [],
     )
 
 
