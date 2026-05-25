@@ -23,7 +23,7 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
   return (
     <div className="flex justify-center w-full my-3 animate-spring">
       <div className="w-full max-w-xl space-y-3">
-        <div className="text-[11px] text-muted-foreground/60 text-center uppercase tracking-widest font-medium">
+        <div className="text-[11px] text-muted-foreground/60 dark:text-[#98989D]/60 text-center uppercase tracking-widest font-medium">
           方案对比
         </div>
 
@@ -35,14 +35,14 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
               onClick={() => { setChosen(a.name); onSelect(a); }}
               className={cn(
                 "rounded-2xl border p-4 cursor-pointer transition-all duration-200",
-                "hover:border-accent/30 hover:bg-white/[0.02]",
+                "hover:border-accent/30",
                 isChosen
-                  ? "border-accent bg-accent/[0.06] shadow-sm shadow-accent/10"
-                  : "border-border bg-white/[0.01]"
+                  ? "border-accent bg-accent/[0.06] dark:bg-accent/[0.12] shadow-sm shadow-accent/10"
+                  : "border-border dark:border-[#38383A] bg-white/[0.01] dark:bg-[#2C2C2E]"
               )}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[14px] font-medium">{a.name}</span>
+                <span className="text-[14px] font-medium dark:text-[#F5F5F7]">{a.name}</span>
                 <div className="flex items-center gap-2">
                   {a.recommended && (
                     <span className="text-[10px] font-medium text-accent bg-accent/10 px-2 py-0.5 rounded-full">

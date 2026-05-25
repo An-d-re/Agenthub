@@ -35,10 +35,15 @@ def _session_to_item(s: Session, last_msg: str = "") -> SessionListItem:
 
 
 @router.get("", response_model=list[SessionListItem])
-async def list_sessions(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Session).options(selectinload(Session.agents)).order_by(desc(Session.pinned_at), desc(Session.last_active_at))
-    )
+async def list_sessions(
+    search: str | None = Query(None, description="搜索会话标题"),
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(Session).options(selectinload(Session.agents))
+    if search:
+        q = q.where(Session.title.ilike(f"%{search}%"))
+    q = q.order_by(desc(Session.pinned_at), desc(Session.last_active_at))
+    result = await db.execute(q)
     sessions = result.scalars().all()
     return [_session_to_item(s) for s in sessions]
 

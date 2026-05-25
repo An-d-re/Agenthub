@@ -52,11 +52,39 @@ class Orchestrator:
     MAX_CLARIFY_ROUNDS = 2  # 最多澄清轮数
     MAX_TASK_RETRIES = 1    # 自动重试次数
     _locks: dict[str, asyncio.Lock] = {}  # 按 session 串行化，防止竞态
+    _stop_events: dict[str, asyncio.Event] = {}  # 按 session 停止信号
 
     def __init__(self, session_id: str):
         self.session_id = session_id
         self.middleware = MiddlewareChain()
         self._pending_events: list[dict] = []  # 收集事件，commit 后批量发布
+
+    # ── Session 控制 ─────────────────────────────────────────
+
+    @classmethod
+    def stop_session(cls, session_id: str) -> None:
+        """停止 session 中所有正在执行的任务。"""
+        event = cls._stop_events.setdefault(session_id, asyncio.Event())
+        event.set()
+
+    @classmethod
+    def resume_session(cls, session_id: str) -> None:
+        """清除停止信号，允许继续执行。"""
+        event = cls._stop_events.get(session_id)
+        if event:
+            event.clear()
+
+    @classmethod
+    def is_session_stopped(cls, session_id: str) -> bool:
+        """检查 session 是否已被停止。"""
+        event = cls._stop_events.get(session_id)
+        return event is not None and event.is_set()
+
+    def _check_stop(self) -> bool:
+        """检查当前 session 是否被停止，若是则发送停止消息并返回 True。"""
+        if self.is_session_stopped(self.session_id):
+            return True
+        return False
 
     # ── 公开入口 ──────────────────────────────────────────────
 
@@ -272,13 +300,29 @@ class Orchestrator:
     # ── 阶段：confirmed（计划确认）─────────────────────────────
 
     async def _phase_confirmed(self, db: AsyncSession, plan: Plan, user_message: str) -> None:
-        """将选中的方案分解为任务 DAG，创建 Task 记录，进入执行阶段。"""
+        """计划确认阶段：首次进入时分解任务并展示 DAG，后续消息处理确认/编辑。"""
+        # 已有任务 DAG → 这是用户对计划的反馈
+        existing_dag = plan.task_dag or []
+        if existing_dag:
+            lower = user_message.strip().lower()
+            if lower in ("确认", "confirm", "ok", "好的", "可以", "执行", "开始", "go", "yes", "是"):
+                await self._do_confirm_plan(db, plan)
+            elif lower.startswith("删除") or lower.startswith("delete"):
+                # 删除任务： "删除 task-2" / "delete task-2"
+                task_id = user_message.strip().split()[-1] if " " in user_message.strip() else ""
+                await self._do_delete_dag_task(db, plan, task_id)
+            else:
+                await self._send_system_message(
+                    db, "请输入「确认」开始执行任务，或「删除 <任务ID>」移除不需要的任务。"
+                )
+            return
+
+        # 首次进入：分解任务
         agent, adapter = await self._get_agent_for_role(db, "planner")
         if not agent or not adapter:
             await self._send_system_message(db, "没有可用的 Planner Agent。")
             return
 
-        # 构建分解输入
         decompose_input = (
             f"已选方案：{plan.selected_approach}\n"
             f"方案详情：{json.dumps(plan.approaches, ensure_ascii=False)}\n\n"
@@ -298,7 +342,6 @@ class Orchestrator:
 
         task_dag = self._extract_json_array(content)
         if not task_dag or not isinstance(task_dag, list) or len(task_dag) == 0:
-            # 兜底：创一个总任务
             task_dag = [{
                 "id": "task-1",
                 "title": plan.selected_approach or "实现需求",
@@ -312,10 +355,9 @@ class Orchestrator:
             td["assigned_agent_id"] = await self._resolve_agent_id(db, td.get("agent_role", "coder"))
 
         plan.task_dag = task_dag
-        plan.phase = "executing"
 
         # 创建 Task 和 TaskDependency 数据库记录
-        id_map: dict[str, str] = {}  # dag id → 数据库 task id
+        id_map: dict[str, str] = {}
         for td in task_dag:
             task = Task(
                 plan_id=plan.id,
@@ -327,27 +369,107 @@ class Orchestrator:
             db.add(task)
             await db.flush()
             id_map[td["id"]] = task.id
+            td["_db_id"] = task.id  # 存回 dag，方便后续查找
 
-        # 创建依赖关系
         for td in task_dag:
-            task_db_id = id_map[td["id"]]
             for dep_id in td.get("dependencies", []):
                 dep_db_id = id_map.get(dep_id)
                 if dep_db_id:
-                    dep = TaskDependency(task_id=task_db_id, depends_on_task_id=dep_db_id)
+                    dep = TaskDependency(
+                        task_id=id_map[td["id"]], depends_on_task_id=dep_db_id
+                    )
                     db.add(dep)
 
         await db.flush()
 
-        # 公告任务计划
-        task_lines = []
+        # 发送 plan.confirmed 事件（带结构化任务列表，供前端 DAG 编辑器使用）
+        dag_for_frontend = []
         for td in task_dag:
-            deps = f"（依赖：{', '.join(td.get('dependencies', []))}）" if td.get("dependencies") else ""
-            task_lines.append(f"- {td['id']}: {td['title']} {deps}")
-        await self._send_system_message(db, "**任务计划：**\n" + "\n".join(task_lines) + "\n\n开始执行…")
+            dag_for_frontend.append({
+                "id": td["id"],
+                "title": td["title"],
+                "description": td.get("description", "")[:200],
+                "dependencies": td.get("dependencies", []),
+                "agent_role": td.get("agent_role", "coder"),
+                "db_id": td.get("_db_id", ""),
+            })
 
-        # 启动第一批就绪任务
-        await self._execute_ready_tasks(db, plan, id_map)
+        msg = Message(
+            session_id=self.session_id,
+            role="system",
+            content="**任务计划已生成，请确认后执行：**\n" + "\n".join(
+                f"- {t['id']}: {t['title']}" for t in dag_for_frontend
+            ),
+            message_type="system",
+        )
+        db.add(msg)
+        await db.flush()
+
+        self._pending_events.append({
+            "type": "plan.confirmed",
+            "session_id": self.session_id,
+            "payload": {
+                "message_id": msg.id,
+                "tasks": dag_for_frontend,
+                "hint": "请勾选/删除任务后点击「确认执行」，或输入「确认」/「删除 <任务ID>」",
+            },
+        })
+
+    async def _do_confirm_plan(self, db: AsyncSession, plan: Plan) -> None:
+        """用户确认计划，进入执行阶段。"""
+        plan.phase = "executing"
+        await self._send_system_message(db, "计划已确认，开始执行任务…")
+        await self._execute_ready_tasks_from_db(db, plan)
+
+    async def _do_delete_dag_task(self, db: AsyncSession, plan: Plan, dag_task_id: str) -> None:
+        """从 DAG 中删除指定任务及其数据库记录。"""
+        task_dag = plan.task_dag or []
+        target = next((t for t in task_dag if t.get("id") == dag_task_id), None)
+        if not target:
+            await self._send_system_message(db, f"未找到任务 {dag_task_id}。可删除的任务：{', '.join(t.get('id','') for t in task_dag)}")
+            return
+
+        # 删除数据库 Task 记录
+        db_task_id = target.get("_db_id", "")
+        if db_task_id:
+            db_task = await db.get(Task, db_task_id)
+            if db_task:
+                await db.delete(db_task)
+
+        # 从 DAG 中移除并更新依赖
+        new_dag = [t for t in task_dag if t.get("id") != dag_task_id]
+        for t in new_dag:
+            t["dependencies"] = [d for d in t.get("dependencies", []) if d != dag_task_id]
+
+        plan.task_dag = new_dag
+        await self._send_system_message(
+            db, f"已移除任务「{target.get('title', dag_task_id)}」。"
+            + (f" 剩余 {len(new_dag)} 个任务。" if new_dag else " 所有任务已清空。")
+        )
+
+    async def confirm_plan(self) -> None:
+        """外部入口：通过 WS plan.action 确认计划。"""
+        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with lock:
+            async with async_session() as db:
+                plan = await self._get_or_create_active_plan(db)
+                if not plan or plan.phase != "confirmed":
+                    return
+                await self._do_confirm_plan(db, plan)
+                await db.commit()
+            await self._flush_pending_events()
+
+    async def delete_dag_task(self, dag_task_id: str) -> None:
+        """外部入口：通过 WS plan.action 删除任务。"""
+        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with lock:
+            async with async_session() as db:
+                plan = await self._get_or_create_active_plan(db)
+                if not plan or plan.phase != "confirmed":
+                    return
+                await self._do_delete_dag_task(db, plan, dag_task_id)
+                await db.commit()
+            await self._flush_pending_events()
 
     # ── 阶段：executing（迭代执行）─────────────────────────────
 
@@ -424,6 +546,11 @@ class Orchestrator:
         if not ready:
             return
 
+        # 检查停止信号
+        if self._check_stop():
+            await self._send_system_message(db, "任务执行已停止。")
+            return
+
         logger.info("并行执行 %d 个就绪任务", len(ready))
 
         async def run_one(task_id: str) -> None:
@@ -439,7 +566,7 @@ class Orchestrator:
         await asyncio.gather(*[run_one(tid) for _, tid in ready])
 
         # 用主 session 检查是否全部完成，继续下一批
-        if not await self._check_all_done(db, plan):
+        if not self._check_stop() and not await self._check_all_done(db, plan):
             await self._execute_ready_tasks_from_db(db, plan)
 
     async def _execute_single_task(self, db: AsyncSession, plan: Plan, task: Task) -> None:
