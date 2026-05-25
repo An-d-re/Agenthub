@@ -50,7 +50,7 @@ export function TracePanel() {
     : sortedTraces;
 
   if (!sid || spans.length === 0) return (
-    <div className="flex items-center justify-center h-full text-[13px] text-[#C7C7CC] dark:text-[#636366] text-center px-4">
+    <div className="flex items-center justify-center h-full text-[13px] text-[var(--text-tertiary)] dark:text-[#636366] text-center px-4">
       暂无追踪数据<br /><span className="text-[11px]">执行任务后查看</span>
     </div>
   );
@@ -58,19 +58,19 @@ export function TracePanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 shrink-0">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#86868B] dark:text-[#98989D]">调用追踪</h3>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)] dark:text-[#98989D]">调用追踪</h3>
 
         {/* Service filter */}
         <div className="flex gap-1 mt-2 flex-wrap">
           <button onClick={() => setServiceFilter(null)}
             className={cn("text-[10px] px-2 py-0.5 rounded-md transition-colors",
-              !serviceFilter ? "bg-[#007AFF] text-white" : "bg-[#F5F5F7] dark:bg-[#3A3A3C] text-[#86868B] dark:text-[#98989D] hover:bg-[#E5E5E7] dark:hover:bg-[#48484A]")}>
+              !serviceFilter ? "bg-[var(--accent)] text-white" : "bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] text-[var(--text-secondary)] dark:text-[#98989D] hover:bg-[var(--border)] dark:hover:bg-[#48484A]")}>
             全部
           </button>
           {services.map(svc => (
             <button key={svc} onClick={() => setServiceFilter(serviceFilter === svc ? null : svc)}
               className={cn("text-[10px] px-2 py-0.5 rounded-md transition-colors flex items-center gap-1",
-                serviceFilter === svc ? "text-white" : "bg-[#F5F5F7] dark:bg-[#3A3A3C] text-[#86868B] dark:text-[#98989D] hover:bg-[#E5E5E7] dark:hover:bg-[#48484A]")}
+                serviceFilter === svc ? "text-white" : "bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] text-[var(--text-secondary)] dark:text-[#98989D] hover:bg-[var(--border)] dark:hover:bg-[#48484A]")}
               style={serviceFilter === svc ? { backgroundColor: COLORS[svc] || "#86868B" } : {}}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[svc] || "#86868B" }} />
               {svc}
@@ -83,7 +83,7 @@ export function TracePanel() {
           <select
             value={selectedTrace || ""}
             onChange={e => setSelectedTrace(e.target.value || null)}
-            className="mt-2 w-full text-[11px] bg-[#F5F5F7] dark:bg-[#2C2C2E] dark:text-[#F5F5F7] border-0 rounded-lg px-2 py-1.5 outline-none"
+            className="mt-2 w-full text-[11px] bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] dark:text-[var(--bg-secondary)] border-0 rounded-lg px-2 py-1.5 outline-none"
           >
             <option value="">全部 Trace ({sortedTraces.length})</option>
             {sortedTraces.map(([tid, tSpans]) => (
@@ -104,10 +104,10 @@ export function TracePanel() {
           const traceTotal = displaySpans.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
 
           return (
-            <div key={tid} className="border-t border-[#E5E5E7] dark:border-[#38383A] first:border-t-0">
-              <div className="px-4 py-1.5 flex justify-between bg-[#F9F9FB] dark:bg-[#2C2C2E]">
-                <span className="text-[10px] font-mono text-[#86868B] dark:text-[#98989D]">{tid.slice(0, 8)}</span>
-                <span className="text-[10px] text-[#C7C7CC] dark:text-[#636366]">{displaySpans.length} spans · {ms(traceTotal)}</span>
+            <div key={tid} className="border-t border-[var(--border)] dark:border-[#38383A] first:border-t-0">
+              <div className="px-4 py-1.5 flex justify-between bg-[var(--bg-tertiary)] dark:bg-[#2C2C2E]">
+                <span className="text-[10px] font-mono text-[var(--text-secondary)] dark:text-[#98989D]">{tid.slice(0, 8)}</span>
+                <span className="text-[10px] text-[var(--text-tertiary)] dark:text-[#636366]">{displaySpans.length} spans · {ms(traceTotal)}</span>
               </div>
 
               {displaySpans.map(s => {
@@ -117,23 +117,23 @@ export function TracePanel() {
                 const indent = s.parent_span_id ? 16 : 0;
 
                 return (
-                  <div key={s.span_id} className="px-4 py-1.5 hover:bg-[#F9F9FB] dark:hover:bg-[#2C2C2E] transition-colors"
+                  <div key={s.span_id} className="px-4 py-1.5 hover:bg-[var(--bg-tertiary)] dark:hover:bg-[#2C2C2E] transition-colors"
                     style={{ paddingLeft: `${16 + indent}px` }}>
                     <div className="flex items-center gap-2 text-[11px]">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                      <span className="flex-1 truncate font-mono dark:text-[#F5F5F7]">{s.operation_name}</span>
-                      <span className={cn("tabular-nums", isError ? "text-[#FF3B30]" : "text-[#C7C7CC] dark:text-[#636366]")}>
+                      <span className="flex-1 truncate font-mono dark:text-[var(--bg-secondary)]">{s.operation_name}</span>
+                      <span className={cn("tabular-nums", isError ? "text-[var(--danger)]" : "text-[var(--text-tertiary)] dark:text-[#636366]")}>
                         {ms(s.duration_ms || 0)}
                       </span>
                     </div>
-                    <div className="mt-1 h-1 bg-[#F5F5F7] dark:bg-[#3A3A3C] rounded-full overflow-hidden">
+                    <div className="mt-1 h-1 bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-300"
                         style={{ width: `${Math.max(pct, 0.5)}%`, backgroundColor: isError ? "#FF3B30" : color }} />
                     </div>
                     {s.tags && Object.keys(s.tags).length > 0 && (
                       <div className="flex gap-1 mt-1 flex-wrap">
                         {Object.entries(s.tags).slice(0, 4).map(([k, v]) => (
-                          <span key={k} className="text-[9px] text-[#86868B] dark:text-[#98989D] bg-[#F5F5F7] dark:bg-[#3A3A3C] px-1 rounded">
+                          <span key={k} className="text-[9px] text-[var(--text-secondary)] dark:text-[#98989D] bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] px-1 rounded">
                             {k}:{String(v).slice(0, 30)}
                           </span>
                         ))}

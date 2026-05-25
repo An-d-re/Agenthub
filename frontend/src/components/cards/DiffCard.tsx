@@ -14,7 +14,7 @@ import { API_BASE } from "@/lib/constants";
 
 const MonacoDiff = dynamic(
   () => import("@monaco-editor/react").then((m) => m.DiffEditor),
-  { ssr: false, loading: () => <div className="h-64 bg-[#F5F5F7] animate-skeleton rounded-xl" /> }
+  { ssr: false, loading: () => <div className="h-64 bg-[var(--bg-secondary)] animate-skeleton rounded-xl" /> }
 );
 
 interface DiffCardProps {
@@ -82,19 +82,19 @@ export function DiffCard({ artifact }: DiffCardProps) {
           </Badge>
           <span className="text-[10px] text-muted-foreground">查看 Diff</span>
           {applied ? (
-            <span className="text-[10px] text-[#34C759] font-medium">✓ 已应用</span>
+            <span className="text-[10px] text-[var(--success)] font-medium">✓ 已应用</span>
           ) : (
             <button
               onClick={handleApply}
               disabled={applying}
-              className="text-[10px] px-2 py-0.5 rounded-md bg-[#007AFF] text-white hover:bg-[#0066D6] disabled:opacity-50 transition-colors"
+              className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent)] text-white hover:bg-[#0066D6] disabled:opacity-50 transition-colors"
             >
               {applying ? "应用中..." : "应用"}
             </button>
           )}
         </div>
         {applyError && (
-          <div className="text-[11px] text-[#FF3B30] mt-1">{applyError}</div>
+          <div className="text-[11px] text-[var(--danger)] mt-1">{applyError}</div>
         )}
       </div>
 

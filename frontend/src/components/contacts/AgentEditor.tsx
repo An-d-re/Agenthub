@@ -102,15 +102,15 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
       <div className="relative ml-auto w-[min(720px,65vw)] h-full bg-white shadow-2xl animate-slide-in-right flex flex-col"
         style={{ animation: "slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)" }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-8 py-5 border-b border-[#E5E5E7]">
+        <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border)]">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F5F5F7] transition-colors text-[#86868B]">
+            <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
             <h2 className="text-[17px] font-semibold">{editAgent ? "编辑 Agent" : "创建自定义 Agent"}</h2>
           </div>
           <button onClick={handleSave} disabled={saving || !name.trim()}
-            className="px-6 py-2.5 rounded-[10px] bg-[#007AFF] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+            className="px-6 py-2.5 rounded-[10px] bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
             {saving ? "保存中..." : "保存"}
           </button>
         </div>
@@ -122,21 +122,21 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
             <div className="shrink-0 flex flex-col items-center gap-3">
               <div className={cn(
                 "w-20 h-20 rounded-full flex items-center justify-center text-3xl",
-                avatarUrl ? "bg-cover bg-center" : "bg-[#F5F5F7]"
+                avatarUrl ? "bg-cover bg-center" : "bg-[var(--bg-secondary)]"
               )} style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : {}}>
                 {!avatarUrl && "👤"}
               </div>
               <button onClick={() => {
                 const url = prompt("输入头像 URL:");
                 if (url) setAvatarUrl(url);
-              }} className="text-[12px] text-[#007AFF] hover:underline">修改头像</button>
+              }} className="text-[12px] text-[var(--accent)] hover:underline">修改头像</button>
               <div className="mt-4">
-                <p className="text-[11px] text-[#86868B] mb-2 text-center">能力标签</p>
+                <p className="text-[11px] text-[var(--text-secondary)] mb-2 text-center">能力标签</p>
                 <div className="flex flex-wrap gap-1 justify-center">
                   {derivedTags.length > 0 ? derivedTags.map(t => (
-                    <span key={t} className="text-[11px] bg-[#E5E5E7] text-[#1D1D1F] rounded-md px-1.5 py-0.5">{t}</span>
+                    <span key={t} className="text-[11px] bg-[var(--border)] text-[var(--text-primary)] rounded-md px-1.5 py-0.5">{t}</span>
                   )) : (
-                    <span className="text-[11px] text-[#C7C7CC]">无能力标签</span>
+                    <span className="text-[11px] text-[var(--text-tertiary)]">无能力标签</span>
                   )}
                 </div>
               </div>
@@ -146,33 +146,33 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
             <div className="flex-1 space-y-5">
               {/* Name */}
               <div>
-                <label className="text-[13px] font-medium text-[#1D1D1F] mb-1.5 block">Agent 名称</label>
+                <label className="text-[13px] font-medium text-[var(--text-primary)] mb-1.5 block">Agent 名称</label>
                 <input value={name} onChange={e => setName(e.target.value.slice(0, 20))}
                   placeholder="例如：SQL 优化专家"
                   className={cn(
-                    "w-full px-4 py-3 rounded-[10px] bg-[#F5F5F7] border-0 outline-none text-[15px] placeholder:text-[#C7C7CC] transition-colors focus:bg-white focus:ring-2",
-                    name.length >= 20 ? "ring-2 ring-[#FF3B30]" : "focus:ring-[#007AFF]/20"
+                    "w-full px-4 py-3 rounded-[10px] bg-[var(--bg-secondary)] border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] transition-colors focus:bg-white focus:ring-2",
+                    name.length >= 20 ? "ring-2 ring-[#FF3B30]" : "focus:ring-[var(--accent)]/20"
                   )} />
                 <div className="flex justify-between mt-1">
-                  {name.length >= 20 && <span className="text-[11px] text-[#FF3B30]">名称不能超过 20 个字符</span>}
-                  <span className="text-[11px] text-[#C7C7CC] ml-auto">{name.length}/20</span>
+                  {name.length >= 20 && <span className="text-[11px] text-[var(--danger)]">名称不能超过 20 个字符</span>}
+                  <span className="text-[11px] text-[var(--text-tertiary)] ml-auto">{name.length}/20</span>
                 </div>
               </div>
 
               {/* System Prompt */}
               <div>
-                <label className="text-[13px] font-medium text-[#1D1D1F] mb-1.5 block">系统 Prompt</label>
+                <label className="text-[13px] font-medium text-[var(--text-primary)] mb-1.5 block">系统 Prompt</label>
                 <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value.slice(0, 2000))}
                   placeholder="设定 Agent 的角色、个性、知识范围..."
-                  className="w-full px-4 py-3 rounded-[12px] bg-[#F5F5F7] border-0 outline-none text-[14px] placeholder:text-[#C7C7CC] resize-y min-h-[200px] leading-relaxed transition-colors focus:bg-white focus:ring-2 focus:ring-[#007AFF]/20"
+                  className="w-full px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] border-0 outline-none text-[14px] placeholder:text-[var(--text-tertiary)] resize-y min-h-[200px] leading-relaxed transition-colors focus:bg-white focus:ring-2 focus:ring-[var(--accent)]/20"
                   style={{ resize: "vertical" }}
                 />
-                <div className="text-right text-[11px] text-[#C7C7CC] mt-1">{systemPrompt.length}/2000</div>
+                <div className="text-right text-[11px] text-[var(--text-tertiary)] mt-1">{systemPrompt.length}/2000</div>
               </div>
 
               {/* Skills */}
               <div>
-                <label className="text-[13px] font-medium text-[#1D1D1F] mb-2 block">预置 Skill 库 <span className="text-[#C7C7CC] font-normal">(最多 5 个)</span></label>
+                <label className="text-[13px] font-medium text-[var(--text-primary)] mb-2 block">预置 Skill 库 <span className="text-[var(--text-tertiary)] font-normal">(最多 5 个)</span></label>
                 <div className="flex flex-wrap gap-2">
                   {PRESET_SKILLS.map(skill => {
                     const sel = selectedSkills.includes(skill.id);
@@ -181,8 +181,8 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
                         className={cn(
                           "px-4 py-2 rounded-[8px] text-[13px] font-medium transition-all duration-150",
                           sel
-                            ? "bg-[#007AFF] text-white shadow-sm"
-                            : "bg-[#F5F5F7] text-[#86868B] hover:bg-[#E5E5E7] hover:text-[#1D1D1F]"
+                            ? "bg-[var(--accent)] text-white shadow-sm"
+                            : "bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--border)] hover:text-[var(--text-primary)]"
                         )}>
                         {skill.icon} {skill.label}
                       </button>
@@ -195,11 +195,11 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
         </div>
 
         {/* Error */}
-        {error && <div className="px-8 pb-2 text-[13px] text-[#FF3B30] text-center">{error}</div>}
+        {error && <div className="px-8 pb-2 text-[13px] text-[var(--danger)] text-center">{error}</div>}
 
         {/* Footer */}
-        <div className="flex justify-end gap-3 px-8 py-4 border-t border-[#E5E5E7]">
-          <button onClick={onClose} className="px-6 py-2.5 text-[14px] text-[#86868B] hover:text-[#1D1D1F] transition-colors">取消</button>
+        <div className="flex justify-end gap-3 px-8 py-4 border-t border-[var(--border)]">
+          <button onClick={onClose} className="px-6 py-2.5 text-[14px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">取消</button>
         </div>
       </div>
 

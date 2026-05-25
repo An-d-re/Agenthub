@@ -107,27 +107,27 @@ export function MessageInput({ onSend, disabled }: Props) {
     <div className="px-4 pb-4 pt-2 shrink-0 relative">
       {/* 引用回复预览 */}
       {replyTarget && (
-        <div className="flex items-center gap-2 mb-2 px-4 py-2.5 rounded-2xl bg-[#007AFF]/5 border border-[#007AFF]/10 animate-fade-in">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#007AFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+        <div className="flex items-center gap-2 mb-2 px-4 py-2.5 rounded-2xl bg-[#007AFF]/5 border border-[var(--accent)]/10 animate-fade-in">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <polyline points="9 17 4 12 9 7" /><path d="M4 12h10a6 6 0 0 1 6 6v1" />
           </svg>
           <div className="flex-1 min-w-0">
-            <span className="text-[11px] font-semibold text-[#007AFF]">
+            <span className="text-[11px] font-semibold text-[var(--accent)]">
               {replyTarget.role === "user" ? "回复自己" : "回复 Agent"}
             </span>
-            <span className="text-[12px] text-[#86868B] ml-2 truncate">
+            <span className="text-[12px] text-[var(--text-secondary)] ml-2 truncate">
               {replyTarget.fileName ? `[文件] ${replyTarget.fileName}` : (replyTarget.content || "").slice(0, 60)}{(replyTarget.content || "").length > 60 ? "…" : ""}
             </span>
           </div>
           <button
             onClick={() => setReplyTarget(null)}
-            className="w-5 h-5 rounded-full flex items-center justify-center text-[#C7C7CC] hover:text-[#FF3B30] hover:bg-red-50 transition-colors shrink-0"
+            className="w-5 h-5 rounded-full flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-red-50 transition-colors shrink-0"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2 bg-[#F5F5F7] dark:bg-[#2C2C2E] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[#007AFF]/20 focus-within:bg-white dark:focus-within:bg-[#3A3A3C] transition-all duration-200">
+      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-white dark:focus-within:bg-[#3A3A3C] transition-all duration-200">
         <input
           ref={fileInputRef}
           type="file"
@@ -136,7 +136,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           accept="image/*,.txt,.md,.py,.js,.ts,.tsx,.jsx,.json,.yml,.yaml,.html,.css,.sql,.sh,.pdf"
         />
         <button
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[#86868B] dark:text-[#98989D] hover:text-[#007AFF] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--accent)] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5"
           disabled={disabled || uploading || !activeSessionId}
           onClick={() => fileInputRef.current?.click()}
           title="上传文件"
@@ -144,7 +144,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           {uploading ? (
             <div className="relative w-8 h-8 flex items-center justify-center">
               {uploadProgress > 0 ? (
-                <span className="text-[10px] font-semibold text-[#007AFF]">{uploadProgress}%</span>
+                <span className="text-[10px] font-semibold text-[var(--accent)]">{uploadProgress}%</span>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
                   <circle cx="12" cy="12" r="10" strokeOpacity="0.3" /><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
@@ -162,13 +162,13 @@ export function MessageInput({ onSend, disabled }: Props) {
           value={text} onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="输入消息，@ 选择 Agent"
-          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[#C7C7CC] dark:placeholder:text-[#636366] dark:text-[#F5F5F7] leading-relaxed py-1.5"
+          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[#636366] dark:text-[var(--bg-secondary)] leading-relaxed py-1.5"
           rows={1} disabled={disabled}
         />
         <button
           onClick={send}
           disabled={disabled || !text.trim()}
-          className="w-8 h-8 rounded-full bg-[#007AFF] text-white flex items-center justify-center transition-all duration-150 hover:bg-[#0066D6] active:scale-90 disabled:opacity-30 disabled:active:scale-100 shrink-0 mb-0.5"
+          className="w-8 h-8 rounded-full bg-[var(--accent)] text-white flex items-center justify-center transition-all duration-150 hover:bg-[#0066D6] active:scale-90 disabled:opacity-30 disabled:active:scale-100 shrink-0 mb-0.5"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
@@ -176,7 +176,7 @@ export function MessageInput({ onSend, disabled }: Props) {
 
       {/* @Mention dropdown */}
       {mention.active && filteredAgents.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[#E5E5E7] dark:border-[#38383A] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
           {filteredAgents.map((agent, i) => (
             <button
               key={agent.id}
@@ -184,7 +184,7 @@ export function MessageInput({ onSend, disabled }: Props) {
               onMouseEnter={() => setHighlightIdx(i)}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                i === highlightIdx ? "bg-[#007AFF]/10" : "hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C]"
+                i === highlightIdx ? "bg-[#007AFF]/10" : "hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C]"
               )}
             >
               <div className={cn(
@@ -198,15 +198,15 @@ export function MessageInput({ onSend, disabled }: Props) {
                   : agent.adapterType === "deepseek" ? "🧠" : agent.adapterType === "anthropic" ? "✨" : "🔧"}
               </div>
               <div>
-                <div className="text-[14px] font-medium dark:text-[#F5F5F7]">{agent.name}</div>
-                <div className="text-[11px] text-[#86868B] dark:text-[#98989D]">{agent.adapterType}</div>
+                <div className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">{agent.name}</div>
+                <div className="text-[11px] text-[var(--text-secondary)] dark:text-[#98989D]">{agent.adapterType}</div>
               </div>
             </button>
           ))}
         </div>
       )}
 
-      <div className="text-[11px] text-[#C7C7CC] dark:text-[#636366] text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · @ 选择 Agent</div>
+      <div className="text-[11px] text-[var(--text-tertiary)] dark:text-[#636366] text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · @ 选择 Agent</div>
     </div>
   );
 }

@@ -105,26 +105,26 @@ export function ChatPanel() {
           {editingTitle ? (
             <input autoFocus value={title} onChange={e=>setTitle(e.target.value)}
               onBlur={handleRename} onKeyDown={e=>{if(e.key==="Enter")handleRename();if(e.key==="Escape")setEditingTitle(false);}}
-              className="text-[17px] font-semibold bg-transparent border-0 outline-none border-b-2 border-[#007AFF] w-full" />
+              className="text-[17px] font-semibold bg-transparent border-0 outline-none border-b-2 border-[var(--accent)] w-full" />
           ) : (
-            <h2 className="text-[17px] font-semibold text-[#1D1D1F] dark:text-[#F5F5F7] tracking-tight cursor-pointer hover:text-[#007AFF] transition-colors"
+            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] tracking-tight cursor-pointer hover:text-[var(--accent)] transition-colors"
               onClick={()=>{setTitle(activeSession?.title||"");setEditingTitle(true);}}>
               {activeSession?.title || "聊天"}
             </h2>
           )}
           {activeSession && (
-            <p className="text-[12px] text-[#86868B] dark:text-[#98989D] mt-0.5">
+            <p className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] mt-0.5">
               {activeSession.type === "group" ? `群聊 · ${sessionAgents.length} 人` : "单聊"}
             </p>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-[#34C759] animate-pulse-blue" : connectionStatus==="connecting"?"bg-[#FF9F0A] animate-pulse":"bg-[#C7C7CC]")} />
-          <span className="text-[12px] text-[#86868B]">{isConnected?"在线":connectionStatus==="connecting"?"连接中":"离线"}</span>
+          <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-[var(--success)] animate-pulse-blue" : connectionStatus==="connecting"?"bg-[var(--warning)] animate-pulse":"bg-[#C7C7CC]")} />
+          <span className="text-[12px] text-[var(--text-secondary)]">{isConnected?"在线":connectionStatus==="connecting"?"连接中":"离线"}</span>
           {activeSession?.type === "group" && (
             <button
               onClick={() => sendSessionControl("stop")}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[#FF3B30] hover:bg-red-50 transition-colors"
+              className="w-6 h-6 rounded-full flex items-center justify-center text-[var(--danger)] hover:bg-red-50 transition-colors"
               title="停止执行"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
@@ -133,16 +133,16 @@ export function ChatPanel() {
           {activeSession?.type === "group" && (
             <div className="relative">
               <button onClick={()=>setShowMenu(!showMenu)}
-                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[#F5F5F7] transition-colors text-[#86868B]">
+                className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)]">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[#E5E5E7] dark:border-[#38383A] py-1 z-50 animate-fade-in"
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 z-50 animate-fade-in"
                   onClick={()=>setShowMenu(false)}>
                   <button onClick={()=>setShowMembers(true)}
-                    className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[#F5F5F7] hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] transition-colors">管理成员</button>
+                    className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">管理成员</button>
                   <button onClick={()=>{setTitle(activeSession?.title||"");setEditingTitle(true);}}
-                    className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[#F5F5F7] hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] transition-colors">重命名</button>
+                    className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">重命名</button>
                 </div>
               )}
             </div>
@@ -154,7 +154,7 @@ export function ChatPanel() {
       {connBanner && (
         <div className={cn(
           "text-center text-[12px] py-1.5 font-medium transition-all",
-          connBanner === "reconnecting" ? "bg-[#FF9F0A]/10 text-[#FF9F0A]" : "bg-[#34C759]/10 text-[#34C759]"
+          connBanner === "reconnecting" ? "bg-[var(--warning)]/10 text-[var(--warning)]" : "bg-[var(--success)]/10 text-[var(--success)]"
         )}>
           {connBanner === "reconnecting" ? "⚠️ 连接断开，正在重连…" : "✅ 已重新连接"}
         </div>
@@ -166,27 +166,27 @@ export function ChatPanel() {
       {showMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>
           <div className="bg-white dark:bg-[#2C2C2E] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e=>e.stopPropagation()}>
-            <h3 className="text-[17px] font-semibold dark:text-[#F5F5F7] mb-4">群成员</h3>
+            <h3 className="text-[17px] font-semibold dark:text-[var(--bg-secondary)] mb-4">群成员</h3>
             <div className="space-y-2 mb-4">
               {sessionAgents.map(aid => {
                 const agent = agents.find(a => a.id === aid);
                 return (
                   <div key={aid} className="flex items-center justify-between py-1.5">
-                    <span className="text-[14px] dark:text-[#F5F5F7]">{agent?.name || aid.slice(0,8)}</span>
+                    <span className="text-[14px] dark:text-[var(--bg-secondary)]">{agent?.name || aid.slice(0,8)}</span>
                     {sessionAgents.length > 1 && (
                       <button onClick={()=>handleRemoveMember(aid)}
-                        className="text-[12px] text-[#FF3B30] hover:bg-red-50 dark:hover:bg-red-50/20 px-3 py-1 rounded-lg transition-colors">移除</button>
+                        className="text-[12px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 px-3 py-1 rounded-lg transition-colors">移除</button>
                     )}
                   </div>
                 );
               })}
             </div>
-            <div className="border-t border-[#E5E5E7] dark:border-[#38383A] pt-4">
-              <p className="text-[12px] text-[#86868B] dark:text-[#98989D] mb-2">添加 Agent</p>
+            <div className="border-t border-[var(--border)] dark:border-[#38383A] pt-4">
+              <p className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] mb-2">添加 Agent</p>
               <div className="space-y-1">
                 {agents.filter(a => !sessionAgents.includes(a.id)).map(a => (
                   <button key={a.id} onClick={()=>handleAddMember(a.id)}
-                    className="w-full text-left px-3 py-2 rounded-[10px] text-[14px] dark:text-[#F5F5F7] hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] transition-colors flex items-center gap-2">
+                    className="w-full text-left px-3 py-2 rounded-[10px] text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors flex items-center gap-2">
                     <span className="text-lg">{a.adapterType==="deepseek"?"🧠":a.adapterType==="anthropic"?"✨":"🔧"}</span>
                     {a.name}
                   </button>
@@ -194,7 +194,7 @@ export function ChatPanel() {
               </div>
             </div>
             <button onClick={()=>setShowMembers(false)}
-              className="w-full mt-4 py-2.5 rounded-xl bg-[#007AFF] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors">完成</button>
+              className="w-full mt-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors">完成</button>
           </div>
         </div>
       )}

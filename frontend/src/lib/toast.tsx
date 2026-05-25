@@ -34,9 +34,9 @@ const ICONS: Record<ToastType, string> = {
 };
 
 const COLORS: Record<ToastType, string> = {
-  success: "bg-[#34C759]/95",
-  error:   "bg-[#FF3B30]/95",
-  warning: "bg-[#FF9F0A]/95",
+  success: "bg-[var(--success)]/95",
+  error:   "bg-[var(--danger)]/95",
+  warning: "bg-[var(--warning)]/95",
   info:    "bg-[#007AFF]/95",
 };
 

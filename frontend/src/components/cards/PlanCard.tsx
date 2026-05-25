@@ -42,7 +42,7 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
               )}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[14px] font-medium dark:text-[#F5F5F7]">{a.name}</span>
+                <span className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">{a.name}</span>
                 <div className="flex items-center gap-2">
                   {a.recommended && (
                     <span className="text-[10px] font-medium text-accent bg-accent/10 px-2 py-0.5 rounded-full">

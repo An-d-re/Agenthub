@@ -66,10 +66,10 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
   const selectedRange = selStart !== null && selEnd !== null && selStart !== selEnd;
 
   return (
-    <div className="my-2 rounded-xl overflow-hidden border border-[#E5E5E7] bg-[#1D1D1F] text-[#F5F5F7]">
+    <div className="my-2 rounded-xl overflow-hidden border border-[var(--border)] bg-[#1D1D1F] text-[var(--bg-secondary)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-[#2D2D2F] border-b border-[#3D3D3F]">
-        <span className="text-[11px] text-[#86868B] font-mono">{language || "code"}</span>
+        <span className="text-[11px] text-[var(--text-secondary)] font-mono">{language || "code"}</span>
         <span className="text-[10px] text-[#6E6E70]">点击行号选择要修改的行</span>
       </div>
 
@@ -90,7 +90,7 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
                 <td
                   className={cn(
                     "text-right pr-3 pl-2 select-none text-[11px] w-12 font-mono align-top pt-[3px]",
-                    isSelected(i) ? "text-[#007AFF]" : "text-[#5E5E62]"
+                    isSelected(i) ? "text-[var(--accent)]" : "text-[#5E5E62]"
                   )}
                   onClick={() => handleLineClick(i)}
                 >
@@ -108,7 +108,7 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
       {/* Modify input */}
       {selectedRange && (
         <div className="flex items-center gap-2 px-4 py-2.5 bg-[#2D2D2F] border-t border-[#3D3D3F] animate-fade-in">
-          <span className="text-[11px] text-[#86868B] shrink-0">
+          <span className="text-[11px] text-[var(--text-secondary)] shrink-0">
             修改第{selStart! + 1}-{selEnd! + 1}行:
           </span>
           <input
@@ -117,18 +117,18 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
             onChange={(e) => setInstruction(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="描述修改内容…"
-            className="flex-1 bg-[#3D3D3F] border-0 outline-none rounded-lg px-3 py-1.5 text-[13px] text-[#F5F5F7] placeholder:text-[#6E6E70] focus:ring-1 focus:ring-[#007AFF]"
+            className="flex-1 bg-[#3D3D3F] border-0 outline-none rounded-lg px-3 py-1.5 text-[13px] text-[var(--bg-secondary)] placeholder:text-[#6E6E70] focus:ring-1 focus:ring-[var(--accent)]"
           />
           <button
             onClick={handleSendModify}
             disabled={!instruction.trim()}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-[#007AFF] text-white text-[12px] font-medium hover:bg-[#0066D6] disabled:opacity-30 transition-all"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12px] font-medium hover:bg-[#0066D6] disabled:opacity-30 transition-all"
           >
             发送
           </button>
           <button
             onClick={() => { setSelStart(null); setSelEnd(null); setInstruction(""); }}
-            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[#86868B] hover:text-[#F5F5F7] hover:bg-[#3D3D3F] transition-colors text-[14px]"
+            className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--bg-secondary)] hover:bg-[#3D3D3F] transition-colors text-[14px]"
           >
             ✕
           </button>

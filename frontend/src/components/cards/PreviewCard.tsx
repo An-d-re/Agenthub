@@ -114,11 +114,11 @@ export function PreviewCard({ artifact }: Props) {
       <div className="flex justify-center w-full my-2 animate-fade-in">
         <div
           onClick={handleOpen}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#34C759]/30 bg-[#34C759]/5 hover:border-[#34C759]/60 cursor-pointer transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#34C759]/30 bg-[var(--success)]/5 hover:border-[#34C759]/60 cursor-pointer transition-colors"
         >
           <span className="text-sm">🌐</span>
           <span className="text-xs font-mono truncate max-w-[160px]">{fileName}</span>
-          <span className="text-[10px] text-[#34C759] font-medium">预览</span>
+          <span className="text-[10px] text-[var(--success)] font-medium">预览</span>
         </div>
       </div>
 
@@ -133,8 +133,8 @@ export function PreviewCard({ artifact }: Props) {
                 className={cn(
                   "px-3 py-1 rounded-[8px] text-[11px] font-medium transition-all",
                   deployUrl
-                    ? "bg-[#34C759]/10 text-[#34C759]"
-                    : "bg-[#007AFF] text-white hover:bg-[#0066D6] disabled:opacity-50"
+                    ? "bg-[var(--success)]/10 text-[var(--success)]"
+                    : "bg-[var(--accent)] text-white hover:bg-[#0066D6] disabled:opacity-50"
                 )}
               >
                 {deploying ? "部署中..." : deployUrl ? "✓ 已部署" : "🚀 一键部署"}
@@ -143,14 +143,14 @@ export function PreviewCard({ artifact }: Props) {
           </DialogHeader>
 
           {deployUrl && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[#34C759]/5 rounded-xl border border-[#34C759]/20 text-[13px]">
-              <span className="text-[#34C759]">✅</span>
-              <a href={deployUrl} target="_blank" rel="noopener noreferrer" className="text-[#007AFF] hover:underline font-mono text-[12px] truncate">
+            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--success)]/5 rounded-xl border border-[#34C759]/20 text-[13px]">
+              <span className="text-[var(--success)]">✅</span>
+              <a href={deployUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline font-mono text-[12px] truncate">
                 {deployUrl}
               </a>
               <button
                 onClick={() => navigator.clipboard?.writeText(deployUrl)}
-                className="ml-auto text-[11px] text-[#86868B] hover:text-[#1D1D1F] shrink-0"
+                className="ml-auto text-[11px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] shrink-0"
               >
                 复制
               </button>
@@ -158,14 +158,14 @@ export function PreviewCard({ artifact }: Props) {
           )}
 
           {/* Device switcher */}
-          <div className="flex items-center justify-center gap-1 bg-[#F5F5F7] dark:bg-[#2C2C2E] rounded-xl p-1 w-fit mx-auto">
+          <div className="flex items-center justify-center gap-1 bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] rounded-xl p-1 w-fit mx-auto">
             {DEVICE_PRESETS.map((p) => (
               <button
                 key={p.key}
                 onClick={() => setDevice(p.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all",
-                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[#1D1D1F] dark:text-[#F5F5F7]" : "text-[#86868B] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]"
+                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
                 )}
               >
                 {p.label}
@@ -177,7 +177,7 @@ export function PreviewCard({ artifact }: Props) {
           <div className="flex-1 min-h-0 flex justify-center">
             <div
               className={cn(
-                "border border-[#E5E5E7] rounded-xl overflow-hidden bg-white transition-all duration-300",
+                "border border-[var(--border)] rounded-xl overflow-hidden bg-white transition-all duration-300",
                 isDesktop ? "w-full h-full" : ""
               )}
               style={isDesktop ? undefined : { width: preset.w, height: preset.h, maxHeight: "100%" }}
