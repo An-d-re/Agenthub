@@ -119,6 +119,12 @@ export function useWebSocket(sessionId: string | null) {
             messageId: p.message_id || "",
             approaches: p.approaches || [],
           });
+        } else if (msg.type === "plan.confirmed") {
+          store.setConfirmedPlan(sessionId, {
+            messageId: p.message_id || "",
+            tasks: p.tasks || [],
+            hint: p.hint || "",
+          });
         } else if (msg.type === "task.update") {
           store.upsertTask(sessionId, {
             taskId: p.task_id,
@@ -135,6 +141,17 @@ export function useWebSocket(sessionId: string | null) {
             language: p.language,
             contentPreview: p.content_preview,
           });
+        } else if (msg.type === "session.control") {
+          if (p.action === "stopped") {
+            store.addMessage(sessionId, {
+              id: crypto.randomUUID(),
+              sessionId,
+              role: "system",
+              content: "⏹ 任务执行已停止。",
+              messageType: "system",
+              createdAt: new Date().toISOString(),
+            });
+          }
         }
       } catch (e) {
         console.error("WebSocket 消息解析失败:", e);
@@ -179,10 +196,13 @@ export function useWebSocket(sessionId: string | null) {
     };
   }, [connect]);
 
-  const sendMessage = useCallback((content: string): boolean => {
+  const sendMessage = useCallback((content: string, quoteMessageId?: string): boolean => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "chat.send", payload: { content } }));
+      ws.send(JSON.stringify({
+        type: "chat.send",
+        payload: { content, quote_message_id: quoteMessageId || "" },
+      }));
       return true;
     }
     console.warn("WebSocket 未连接，消息发送失败");
@@ -202,5 +222,31 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
-  return { sendMessage, sendModify };
+  const sendPlanAction = useCallback((action: string, taskId?: string): boolean => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: "plan.action",
+        payload: { action, task_id: taskId || "" },
+      }));
+      return true;
+    }
+    console.warn("WebSocket 未连接，plan action 发送失败");
+    return false;
+  }, []);
+
+  const sendSessionControl = useCallback((action: string): boolean => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: "session.control",
+        payload: { action },
+      }));
+      return true;
+    }
+    console.warn("WebSocket 未连接，session control 发送失败");
+    return false;
+  }, []);
+
+  return { sendMessage, sendModify, sendPlanAction, sendSessionControl };
 }

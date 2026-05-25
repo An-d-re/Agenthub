@@ -113,19 +113,19 @@ export function LeftSidebar() {
   const filteredSessions = search ? sessions.filter(s => (s.title||"").toLowerCase().includes(search.toLowerCase())) : sessions;
 
   return (
-    <div className="flex flex-col h-full bg-[#F5F5F7]">
+    <div className="flex flex-col h-full bg-[#F5F5F7] dark:bg-[#1C1C1E]">
       {/* Search */}
       <div className="p-3">
-        <div className="flex items-center gap-2 bg-[#E5E5E7] rounded-[10px] px-3 py-2">
+        <div className="flex items-center gap-2 bg-[#E5E5E7] dark:bg-[#2C2C2E] rounded-[10px] px-3 py-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86868B" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[#86868B]" placeholder="搜索 Agent 或会话" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[#86868B] dark:text-[#F5F5F7] dark:placeholder:text-[#636366]" placeholder="搜索 Agent 或会话" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
       <ScrollArea className="flex-1">
         {/* Agents section */}
         <div className="px-3 pb-1">
-          <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B]">Agents</h3>
+          <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B] dark:text-[#98989D]">Agents</h3>
           {loading ? (
             <div className="space-y-1">
               {[1,2,3].map(i => (
@@ -145,14 +145,14 @@ export function LeftSidebar() {
               <div key={agent.id}
                 onClick={() => setSelectedContact(agent.id)}
                 onContextMenu={e => handleContextMenu(e, agent.id)}
-                className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white shadow-sm")}>
+                className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[#2C2C2E] shadow-sm")}>
                 {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#007AFF] rounded-full" />}
                 <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-lg shrink-0", AGENT_COLORS[agent.adapterType] || "from-gray-400 to-gray-500")}>
                   {agent.roleType === "custom" ? (agent.avatarUrl ? <img src={agent.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={agent.name} /> : "👤") : (AGENT_EMOJI[agent.adapterType] || "\u{1F4A1}")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[15px] font-medium truncate">{agent.name}</div>
-                  <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[#86868B] bg-[#E5E5E7] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
+                  <div className="text-[15px] font-medium truncate dark:text-[#F5F5F7]">{agent.name}</div>
+                  <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[#86868B] dark:text-[#98989D] bg-[#E5E5E7] dark:bg-[#3A3A3C] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
                 </div>
               </div>
             );
@@ -160,11 +160,11 @@ export function LeftSidebar() {
           )}
         </div>
 
-        <div className="mx-3 border-t border-[#E5E5E7] my-2" />
+        <div className="mx-3 border-t border-[#E5E5E7] dark:border-[#38383A] my-2" />
 
         {/* Sessions section */}
         <div className="px-3 pb-16">
-          <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B]">会话</h3>
+          <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B] dark:text-[#98989D]">会话</h3>
           {loading ? (
             <div className="space-y-1">
               {[1,2].map(i => (
@@ -182,14 +182,14 @@ export function LeftSidebar() {
               const isActive = activeSessionId === s.id;
               return (
                 <div key={s.id} onClick={() => setActiveSession(s.id)}
-                  className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white shadow-sm")}>
+                  className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[#2C2C2E] shadow-sm")}>
                   {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#007AFF] rounded-full" />}
-                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0", s.type==="group"?"bg-[#E5E5E7]":"bg-gradient-to-br from-blue-400 to-blue-500")}>
+                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0", s.type==="group"?"bg-[#E5E5E7] dark:bg-[#3A3A3C]":"bg-gradient-to-br from-blue-400 to-blue-500")}>
                     {s.type==="group"?"#":"@"}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-medium truncate">{s.title||"新聊天"}</div>
-                    <div className="text-[12px] text-[#86868B]">{s.agentCount>0 && s.type==="group"?`群聊 · ${s.agentCount}人`:"单聊"}</div>
+                    <div className="text-[15px] font-medium truncate dark:text-[#F5F5F7]">{s.title||"新聊天"}</div>
+                    <div className="text-[12px] text-[#86868B] dark:text-[#98989D]">{s.agentCount>0 && s.type==="group"?`群聊 · ${s.agentCount}人`:"单聊"}</div>
                   </div>
                   <button onClick={e=>handleDeleteSession(e,s.id)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 text-[#C7C7CC] hover:text-[#FF3B30]">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -208,8 +208,8 @@ export function LeftSidebar() {
       {/* Bottom buttons */}
       <div className="p-3 space-y-2">
         <button onClick={()=>{setEditingAgent(null);setEditorOpen(true);}} className="w-full py-2.5 rounded-[12px] bg-[#007AFF] text-white text-[15px] font-medium transition-all duration-150 hover:bg-[#0066D6] active:scale-[0.98]">+ 新建 Agent</button>
-        <button onClick={handleNewChat} className="w-full py-2.5 rounded-[12px] bg-white border border-[#E5E5E7] text-[#1D1D1F] text-[15px] font-medium transition-all duration-150 hover:bg-[#F5F5F7] active:scale-[0.98]">+ 新建聊天</button>
-        <button onClick={handleNewGroup} className="w-full py-2.5 rounded-[12px] bg-white border border-[#E5E5E7] text-[#1D1D1F] text-[15px] font-medium transition-all duration-150 hover:bg-[#F5F5F7] active:scale-[0.98]">+ 新建群聊</button>
+        <button onClick={handleNewChat} className="w-full py-2.5 rounded-[12px] bg-white dark:bg-[#2C2C2E] border border-[#E5E5E7] dark:border-[#38383A] text-[#1D1D1F] dark:text-[#F5F5F7] text-[15px] font-medium transition-all duration-150 hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] active:scale-[0.98]">+ 新建聊天</button>
+        <button onClick={handleNewGroup} className="w-full py-2.5 rounded-[12px] bg-white dark:bg-[#2C2C2E] border border-[#E5E5E7] dark:border-[#38383A] text-[#1D1D1F] dark:text-[#F5F5F7] text-[15px] font-medium transition-all duration-150 hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] active:scale-[0.98]">+ 新建群聊</button>
       </div>
 
       {/* Agent Editor */}
@@ -217,9 +217,9 @@ export function LeftSidebar() {
 
       {/* Context menu */}
       {contextMenu && (
-        <div className="fixed z-50 bg-white rounded-xl shadow-lg border border-[#E5E5E7] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[#F5F5F7] transition-colors">编辑</button>
-          <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[#FF3B30] hover:bg-red-50 transition-colors">删除</button>
+        <div className="fixed z-50 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[#E5E5E7] dark:border-[#38383A] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[#F5F5F7] hover:bg-[#F5F5F7] dark:hover:bg-[#3A3A3C] transition-colors">编辑</button>
+          <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[#FF3B30] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
         </div>
       )}
     </div>

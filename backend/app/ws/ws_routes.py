@@ -54,6 +54,10 @@ async def websocket_endpoint(
                     await _handle_chat_send(session_id, client_id, data.get("payload", {}))
                 elif msg_type == "chat.modify":
                     await _handle_chat_modify(session_id, client_id, data.get("payload", {}))
+                elif msg_type == "plan.action":
+                    await _handle_plan_action(session_id, data.get("payload", {}))
+                elif msg_type == "session.control":
+                    await _handle_session_control(session_id, data.get("payload", {}))
                 elif msg_type == "ping":
                     manager.handle_pong(client_id)  # reset heartbeat on any ping/pong
                     await manager.send_personal({"type": "pong", "session_id": session_id}, client_id)
@@ -90,11 +94,13 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
         if session:
             session.last_active_at = _utcnow()
 
+        quote_id = payload.get("quote_message_id", "") or None
         message = Message(
             session_id=session_id,
             role="user",
             content=content,
             message_type=payload.get("message_type", "text"),
+            parent_id=quote_id,
         )
         db.add(message)
         await db.commit()
@@ -110,6 +116,7 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
                 "role": message.role,
                 "content": message.content,
                 "message_type": message.message_type,
+                "parent_id": message.parent_id,
                 "created_at": message.created_at.isoformat(),
             },
         }
@@ -183,3 +190,36 @@ async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
 
     from app.services.agent_runner import run_agent_modify
     asyncio.create_task(run_agent_modify(session_id, message_id, start_line, end_line, instruction))
+
+
+async def _handle_plan_action(session_id: str, payload: dict):
+    """Handle plan.action — confirm plan / delete task from DAG."""
+    action = payload.get("action", "")
+    if action == "confirm":
+        from app.core.orchestrator import Orchestrator
+        asyncio.create_task(Orchestrator(session_id).confirm_plan())
+    elif action == "delete_task":
+        task_id = payload.get("task_id", "")
+        if task_id:
+            from app.core.orchestrator import Orchestrator
+            asyncio.create_task(Orchestrator(session_id).delete_dag_task(task_id))
+
+
+async def _handle_session_control(session_id: str, payload: dict):
+    """Handle session.control — stop/resume session execution."""
+    action = payload.get("action", "")
+    from app.core.orchestrator import Orchestrator
+    if action == "stop":
+        Orchestrator.stop_session(session_id)
+        await event_bus.publish(session_id, {
+            "type": "session.control",
+            "session_id": session_id,
+            "payload": {"action": "stopped"},
+        })
+    elif action == "resume":
+        Orchestrator.resume_session(session_id)
+        await event_bus.publish(session_id, {
+            "type": "session.control",
+            "session_id": session_id,
+            "payload": {"action": "resumed"},
+        })

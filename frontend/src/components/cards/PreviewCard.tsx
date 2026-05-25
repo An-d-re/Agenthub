@@ -122,14 +122,14 @@ export function PreviewCard({ artifact }: Props) {
           )}
 
           {/* Device switcher */}
-          <div className="flex items-center justify-center gap-1 bg-[#F5F5F7] rounded-xl p-1 w-fit mx-auto">
+          <div className="flex items-center justify-center gap-1 bg-[#F5F5F7] dark:bg-[#2C2C2E] rounded-xl p-1 w-fit mx-auto">
             {DEVICE_PRESETS.map((p) => (
               <button
                 key={p.key}
                 onClick={() => setDevice(p.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all",
-                  device === p.key ? "bg-white shadow-sm text-[#1D1D1F]" : "text-[#86868B] hover:text-[#1D1D1F]"
+                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[#1D1D1F] dark:text-[#F5F5F7]" : "text-[#86868B] dark:text-[#98989D] hover:text-[#1D1D1F] dark:hover:text-[#F5F5F7]"
                 )}
               >
                 {p.label}

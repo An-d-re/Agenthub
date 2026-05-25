@@ -61,10 +61,32 @@ export interface TaskItem {
   error?: string;
 }
 
+export interface DAGTask {
+  id: string;
+  title: string;
+  description: string;
+  dependencies: string[];
+  agent_role: string;
+  db_id: string;
+}
+
 export interface PlanData {
   messageId: string;
   approaches: Approach[];
   selectedApproach?: string;
+}
+
+export interface ConfirmedPlan {
+  messageId: string;
+  tasks: DAGTask[];
+  hint: string;
+}
+
+export interface ReplyTarget {
+  messageId: string;
+  content: string;
+  role: string;
+  fileName?: string;
 }
 
 export interface TaskData {
@@ -76,6 +98,7 @@ interface ChatState {
   activeSessionId: string | null;
   messages: Record<string, ChatMessage[]>;
   plans: Record<string, PlanData>;          // sessionId → plan
+  confirmedPlans: Record<string, ConfirmedPlan>; // sessionId → confirmed DAG
   tasks: Record<string, TaskItem[]>;         // sessionId → tasks
   artifacts: Record<string, ArtifactItem[]>;  // sessionId → artifacts
   connectionStatus: "disconnected" | "connecting" | "connected";
@@ -90,11 +113,16 @@ interface ChatState {
   setConnectionStatus: (status: "disconnected" | "connecting" | "connected") => void;
   setPlan: (sessionId: string, plan: PlanData) => void;
   setSelectedApproach: (sessionId: string, name: string) => void;
+  setConfirmedPlan: (sessionId: string, plan: ConfirmedPlan) => void;
+  clearConfirmedPlan: (sessionId: string) => void;
+  removeDagTask: (sessionId: string, taskId: string) => void;
   upsertTask: (sessionId: string, task: TaskItem) => void;
   setTasks: (sessionId: string, tasks: TaskItem[]) => void;
   addArtifact: (sessionId: string, artifact: ArtifactItem) => void;
   pendingSend: string | null;
   setPendingSend: (msg: string | null) => void;
+  replyTarget: ReplyTarget | null;
+  setReplyTarget: (target: ReplyTarget | null) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -102,11 +130,13 @@ export const useChatStore = create<ChatState>((set) => ({
   activeSessionId: null,
   messages: {},
   plans: {},
+  confirmedPlans: {},
   tasks: {},
   artifacts: {},
   connectionStatus: "disconnected",
   selectedContactId: null,
   pendingSend: null,
+  replyTarget: null,
 
   setSessions: (sessions) => set({ sessions }),
   setSelectedContact: (id) => set({ selectedContactId: id }),
@@ -176,6 +206,35 @@ export const useChatStore = create<ChatState>((set) => ({
       };
     }),
 
+  setConfirmedPlan: (sessionId, plan) =>
+    set((state) => ({
+      confirmedPlans: { ...state.confirmedPlans, [sessionId]: plan },
+    })),
+
+  clearConfirmedPlan: (sessionId) =>
+    set((state) => {
+      const { [sessionId]: _, ...rest } = state.confirmedPlans;
+      return { confirmedPlans: rest };
+    }),
+
+  removeDagTask: (sessionId, taskId) =>
+    set((state) => {
+      const plan = state.confirmedPlans[sessionId];
+      if (!plan) return state;
+      const updatedTasks = plan.tasks
+        .filter((t) => t.id !== taskId)
+        .map((t) => ({
+          ...t,
+          dependencies: t.dependencies.filter((d) => d !== taskId),
+        }));
+      return {
+        confirmedPlans: {
+          ...state.confirmedPlans,
+          [sessionId]: { ...plan, tasks: updatedTasks },
+        },
+      };
+    }),
+
   upsertTask: (sessionId, task) =>
     set((state) => {
       const existing = state.tasks[sessionId] || [];
@@ -201,4 +260,5 @@ export const useChatStore = create<ChatState>((set) => ({
     })),
 
   setPendingSend: (msg) => set({ pendingSend: msg }),
+  setReplyTarget: (target) => set({ replyTarget: target }),
 }));
