@@ -12,7 +12,7 @@ AgentHub 是 IM 聊天式的多 Agent 协作平台（字节跳动 AI 全栈开�
 # 后端
 cd backend
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --reload-exclude "workspaces/*" --reload-exclude "data/*"
 
 # 前端
 cd frontend
@@ -129,7 +129,16 @@ WS 信封：`{type, session_id, payload}`
 - ✅ Docker Compose（backend + frontend 独立容器）
 - ✅ CodexAdapter 预留桩
 - ✅ framer-motion 动画（MessageBubble spring-in 级联效果）
-- ❌ 文件上传
+- ✅ 文件上传（图片内联预览 + 文件附件卡片，10MB 限制）
+- ✅ 对话式局部修改（CodeBlock 行号选择 + chat.modify 协议 + 流式 Diff）
+- ✅ WS 断线消息补齐（重连后 REST API 拉取断线期间消息）
+- ✅ LLM 上下文压缩（DeepSeek 智能摘要，四维度结构化输出，规则降级兜底）
+- ✅ 骨架屏（LeftSidebar + TaskPipeline 加载占位）
+- ✅ 默认 Agent 种子数据（首次启动自动创建 3 个 Agent）
+- ✅ 文件元数据持久化（file_name/file_url/file_size 存入 Message 表）
+- ✅ 群聊消息显示具体 Agent 名称（多 Agent 可区分来源）
+- ✅ .env.example 模板
+- ✅ uvicorn reload 排除 workspaces/data 目录（避免上传文件误触发重载）
 
 ## Docker 部署
 

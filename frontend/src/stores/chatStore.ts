@@ -8,6 +8,10 @@ export interface ChatMessage {
   content: string;
   messageType: string;
   parentId?: string;
+  codeSelection?: { start_line: number; end_line: number; message_id: string };
+  fileName?: string;
+  fileUrl?: string;
+  fileSize?: number;
   createdAt: string;
 }
 
@@ -81,6 +85,7 @@ interface ChatState {
   setSelectedContact: (id: string | null) => void;
   setActiveSession: (id: string) => void;
   addMessage: (sessionId: string, msg: ChatMessage) => void;
+  appendStreamToken: (sessionId: string, msgId: string, token: string) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   setConnectionStatus: (status: "disconnected" | "connecting" | "connected") => void;
   setPlan: (sessionId: string, plan: PlanData) => void;
@@ -110,8 +115,40 @@ export const useChatStore = create<ChatState>((set) => ({
   addMessage: (sessionId, msg) =>
     set((state) => {
       const prev = state.messages[sessionId] || [];
+      // If message with same id already exists (from streaming), replace it
+      const existingIdx = prev.findIndex((m) => m.id === msg.id);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = msg;
+        return { messages: { ...state.messages, [sessionId]: updated } };
+      }
       return {
         messages: { ...state.messages, [sessionId]: [...prev, msg] },
+      };
+    }),
+
+  appendStreamToken: (sessionId, msgId, token) =>
+    set((state) => {
+      const prev = state.messages[sessionId] || [];
+      const existingIdx = prev.findIndex((m) => m.id === msgId);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = { ...updated[existingIdx], content: updated[existingIdx].content + token };
+        return { messages: { ...state.messages, [sessionId]: updated } };
+      }
+      // Create a new streaming placeholder
+      return {
+        messages: {
+          ...state.messages,
+          [sessionId]: [...prev, {
+            id: msgId,
+            sessionId,
+            role: "agent",
+            content: token,
+            messageType: "text",
+            createdAt: new Date().toISOString(),
+          }],
+        },
       };
     }),
 

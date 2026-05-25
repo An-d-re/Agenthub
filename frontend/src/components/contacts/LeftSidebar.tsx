@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore } from "@/stores/chatStore";
 import { API_BASE } from "@/lib/constants";
@@ -31,6 +32,7 @@ export function LeftSidebar() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<{id:string;name:string;systemPrompt:string;skills:string[];capabilityTags:string[];avatarUrl:string}|null>(null);
   const [contextMenu, setContextMenu] = useState<{x:number;y:number;agentId:string}|null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/agents`).then(r => r.json()).then(data => {
@@ -41,7 +43,7 @@ export function LeftSidebar() {
         isDeletable: a.is_deletable as boolean,
       })));
       if (!selectedContactId && Array.isArray(data) && data.length > 0) setSelectedContact(data[0].id as string);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => setLoading(false));
   }, [setAgents]); // eslint-disable-line
 
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
@@ -124,7 +126,20 @@ export function LeftSidebar() {
         {/* Agents section */}
         <div className="px-3 pb-1">
           <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B]">Agents</h3>
-          {agents.map(agent => {
+          {loading ? (
+            <div className="space-y-1">
+              {[1,2,3].map(i => (
+                <div key={i} className="flex items-center gap-3 px-2 py-2">
+                  <Skeleton className="w-10 h-10 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            agents.map(agent => {
             const isActive = selectedContactId === agent.id;
             return (
               <div key={agent.id}
@@ -141,7 +156,8 @@ export function LeftSidebar() {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
 
         <div className="mx-3 border-t border-[#E5E5E7] my-2" />
@@ -149,29 +165,43 @@ export function LeftSidebar() {
         {/* Sessions section */}
         <div className="px-3 pb-16">
           <h3 className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#86868B]">会话</h3>
-          {filteredSessions.map(s => {
-            const isActive = activeSessionId === s.id;
-            return (
-              <div key={s.id} onClick={() => setActiveSession(s.id)}
-                className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white shadow-sm")}>
-                {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#007AFF] rounded-full" />}
-                <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0", s.type==="group"?"bg-[#E5E5E7]":"bg-gradient-to-br from-blue-400 to-blue-500")}>
-                  {s.type==="group"?"#":"@"}
+          {loading ? (
+            <div className="space-y-1">
+              {[1,2].map(i => (
+                <div key={i} className="flex items-center gap-3 px-2 py-2">
+                  <Skeleton className="w-10 h-10 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-3 w-12" />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[15px] font-medium truncate">{s.title||"新聊天"}</div>
-                  <div className="text-[12px] text-[#86868B]">{s.agentCount>0 && s.type==="group"?`群聊 · ${s.agentCount}人`:"单聊"}</div>
+              ))}
+            </div>
+          ) : (<>
+            {filteredSessions.map(s => {
+              const isActive = activeSessionId === s.id;
+              return (
+                <div key={s.id} onClick={() => setActiveSession(s.id)}
+                  className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white shadow-sm")}>
+                  {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[#007AFF] rounded-full" />}
+                  <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0", s.type==="group"?"bg-[#E5E5E7]":"bg-gradient-to-br from-blue-400 to-blue-500")}>
+                    {s.type==="group"?"#":"@"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[15px] font-medium truncate">{s.title||"新聊天"}</div>
+                    <div className="text-[12px] text-[#86868B]">{s.agentCount>0 && s.type==="group"?`群聊 · ${s.agentCount}人`:"单聊"}</div>
+                  </div>
+                  <button onClick={e=>handleDeleteSession(e,s.id)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 text-[#C7C7CC] hover:text-[#FF3B30]">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
                 </div>
-                <button onClick={e=>handleDeleteSession(e,s.id)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 text-[#C7C7CC] hover:text-[#FF3B30]">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
-              </div>
-            );
-          })}
-          {filteredSessions.length === 0 && (
-            search ? <div className="text-center text-[13px] text-[#C7C7CC] py-8">无匹配结果</div>
-            : <div className="text-center text-[13px] text-[#C7C7CC] py-8">暂无会话</div>
-          )}
+              );
+            })}
+            {filteredSessions.length === 0 && (
+              search ? <div className="text-center text-[13px] text-[#C7C7CC] py-8">无匹配结果</div>
+              : <div className="text-center text-[13px] text-[#C7C7CC] py-8">暂无会话</div>
+            )}
+          </>)}
         </div>
       </ScrollArea>
 
