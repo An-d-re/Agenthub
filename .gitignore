@@ -45,3 +45,6 @@ backend/test_session_id.txt
 .eggs/
 venv/
 .venv/
+
+./claude
+CLAUDE.md
