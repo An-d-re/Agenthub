@@ -25,6 +25,9 @@ class Message(Base):
     message_type = Column(String(20), default="text")  # text | code | image | file | card | system
     parent_id = Column(UUID(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True)
     code_selection = Column(JSON, nullable=True)  # {start_line, end_line} for partial modify
+    file_name = Column(String(500), nullable=True)
+    file_url = Column(String(500), nullable=True)
+    file_size = Column(Integer, nullable=True)
     tokens_used = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 

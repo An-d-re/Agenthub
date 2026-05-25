@@ -52,6 +52,8 @@ async def websocket_endpoint(
 
                 if msg_type == "chat.send":
                     await _handle_chat_send(session_id, client_id, data.get("payload", {}))
+                elif msg_type == "chat.modify":
+                    await _handle_chat_modify(session_id, client_id, data.get("payload", {}))
                 elif msg_type == "ping":
                     manager.handle_pong(client_id)  # reset heartbeat on any ping/pong
                     await manager.send_personal({"type": "pong", "session_id": session_id}, client_id)
@@ -135,3 +137,49 @@ async def _trigger_agent(session_id: str, content: str):
         await run_agent_reply(session_id, content)
     except Exception as e:
         logging.getLogger(__name__).exception("_trigger_agent 异常: %s", e)
+
+
+async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
+    """Handle chat.modify — code selection + modification instruction."""
+    message_id = payload.get("message_id", "")
+    start_line = payload.get("start_line", 0)
+    end_line = payload.get("end_line", 0)
+    instruction = payload.get("instruction", "")
+    if not instruction.strip() or not message_id:
+        return
+
+    async with async_session() as db:
+        session = await db.get(Session, session_id)
+        if session:
+            session.last_active_at = _utcnow()
+
+        message = Message(
+            session_id=session_id,
+            role="user",
+            content=instruction,
+            message_type="modify",
+            parent_id=message_id,
+            code_selection={"start_line": start_line, "end_line": end_line, "message_id": message_id},
+        )
+        db.add(message)
+        await db.commit()
+        await db.refresh(message)
+
+        msg_data = {
+            "type": "chat.message",
+            "session_id": session_id,
+            "payload": {
+                "id": message.id,
+                "session_id": message.session_id,
+                "role": message.role,
+                "content": f"[修改请求] 第{start_line}-{end_line}行: {instruction}",
+                "message_type": message.message_type,
+                "code_selection": message.code_selection,
+                "parent_id": message.parent_id,
+                "created_at": message.created_at.isoformat(),
+            },
+        }
+        await event_bus.publish(session_id, msg_data)
+
+    from app.services.agent_runner import run_agent_modify
+    asyncio.create_task(run_agent_modify(session_id, message_id, start_line, end_line, instruction))

@@ -15,6 +15,9 @@ class MessageResponse(BaseModel):
     message_type: str
     parent_id: Optional[str] = None
     code_selection: Optional[dict] = None
+    file_name: Optional[str] = None
+    file_url: Optional[str] = None
+    file_size: Optional[int] = None
     tokens_used: int
     created_at: datetime
 

@@ -2,6 +2,7 @@
 
 import { useChatStore } from "@/stores/chatStore";
 import { EMPTY_ARRAY } from "@/lib/constants";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 const S: Record<string,{label:string;dot:string;text:string}> = {
@@ -17,8 +18,31 @@ const S: Record<string,{label:string;dot:string;text:string}> = {
 export function TaskPipeline() {
   const sid = useChatStore(s => s.activeSessionId);
   const tasks = useChatStore(s => sid ? (s.tasks[sid]||EMPTY_ARRAY) : EMPTY_ARRAY);
+  const connectionStatus = useChatStore(s => s.connectionStatus);
 
-  if (!sid || tasks.length === 0) {
+  if (!sid) {
+    return <div className="flex items-center justify-center h-full text-[13px] text-[#C7C7CC]">选择会话查看任务</div>;
+  }
+
+  if (connectionStatus === "connecting") {
+    return (
+      <div className="flex flex-col h-full bg-white px-4 py-4 space-y-3">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-2 w-full rounded-full" />
+        {[1,2,3].map(i => (
+          <div key={i} className="flex items-start gap-3 py-2">
+            <Skeleton className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (tasks.length === 0) {
     return <div className="flex items-center justify-center h-full text-[13px] text-[#C7C7CC]">暂无活跃任务</div>;
   }
 

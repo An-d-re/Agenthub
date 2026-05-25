@@ -13,6 +13,7 @@ from app.api.artifacts import router as artifacts_router
 from app.api.deployments import router as deployments_router
 from app.api.sessions import router as sessions_router
 from app.api.traces import router as traces_router
+from app.api.uploads import router as uploads_router
 from app.core.config import settings
 from app.core.database import init_db
 from app.ws.ws_routes import router as ws_router
@@ -39,6 +40,7 @@ app.include_router(artifacts_router)
 app.include_router(deployments_router)
 app.include_router(sessions_router)
 app.include_router(traces_router)
+app.include_router(uploads_router)
 app.include_router(ws_router)
 
 # 部署文件的静态服务

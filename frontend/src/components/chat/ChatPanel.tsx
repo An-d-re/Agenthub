@@ -17,7 +17,7 @@ export function ChatPanel() {
   const pendingSend = useChatStore((s) => s.pendingSend);
   const setPendingSend = useChatStore((s) => s.setPendingSend);
   const agents = useAgentStore((s) => s.agents);
-  const { sendMessage } = useWebSocket(activeSessionId);
+  const { sendMessage, sendModify } = useWebSocket(activeSessionId);
   const [showMenu, setShowMenu] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -112,7 +112,7 @@ export function ChatPanel() {
         </div>
       </div>
 
-      <MessageList />
+      <MessageList onModify={sendModify} />
       <MessageInput onSend={sendMessage} disabled={!isConnected} />
 
       {showMembers && (

@@ -84,23 +84,65 @@ class ContextSummarizer(BaseMiddleware):
         return ctx
 
     async def _summarize_old(self, old_messages: list[dict]) -> str:
-        """无 LLM 的快速摘要：提取关键决策和产出。"""
+        """调用 DeepSeek LLM 做智能摘要，失败时降级为规则摘要。"""
         if not old_messages:
             return ""
 
+        # 构建摘要对话
+        conversation_text = "\n".join(
+            f"[{m.get('role', '?')}]: {m.get('content', '')[:300]}"
+            for m in old_messages[-30:]  # 最多取最近 30 条旧消息做摘要
+        )
+
+        summary_prompt = (
+            "请用中文总结以下对话的关键信息，严格按此格式输出（每行一条，不超过 300 字）：\n"
+            "关键决策: <用户确认了哪些方案、选择了什么技术栈、做了什么取舍>\n"
+            "已生成文件: <列出了哪些文件、分别是什么作用>\n"
+            "待解决问题: <还有哪些问题悬而未决、哪些 TODO 未完成>\n"
+            "用户偏好: <用户表达了哪些偏好、约束条件、代码风格要求>\n\n"
+            f"对话内容:\n{conversation_text}\n\n"
+            "现在输出摘要（如某条确实没有信息可写'无'）："
+        )
+
+        try:
+            from openai import AsyncOpenAI
+            from app.core.config import settings
+
+            if not settings.deepseek_api_key:
+                raise ValueError("DeepSeek API key 未配置")
+
+            client = AsyncOpenAI(
+                api_key=settings.deepseek_api_key,
+                base_url=settings.deepseek_base_url,
+                timeout=15.0,
+                trust_env=False,
+            )
+            response = await client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": summary_prompt}],
+                max_tokens=300,
+                temperature=0.3,
+            )
+            summary = response.choices[0].message.content or ""
+            logger.info("ContextSummarizer: LLM 摘要生成成功 (%d chars)", len(summary))
+            return summary.strip()
+
+        except Exception as e:
+            logger.warning("ContextSummarizer: LLM 摘要失败 (%s)，降级为规则摘要", e)
+            return self._fallback_summarize(old_messages)
+
+    def _fallback_summarize(self, old_messages: list[dict]) -> str:
+        """规则摘要 — LLM 不可用时的降级方案。"""
         decisions: list[str] = []
         files: list[str] = []
 
         for m in old_messages:
             content = m.get("content", "")
-            # 探测关键决策关键词
             lower = content.lower()
             if any(kw in lower for kw in ["方案", "approach", "选择", "selected", "决定", "decided"]):
                 snippet = content[:200].replace("\n", " ")
                 decisions.append(snippet)
-            # 探测文件产出
             if "```" in content or "file:" in lower or "文件" in lower:
-                # 提取文件名
                 paths = re.findall(r'`([^`]+\.\w+)`', content)
                 files.extend(paths[:3])
 
@@ -108,8 +150,8 @@ class ContextSummarizer(BaseMiddleware):
         if decisions:
             parts.append(f"关键决策: {'; '.join(decisions[-2:])}")
         if files:
-            parts.append(f"涉及文件: {', '.join(files[:5])}")
-        return " | ".join(parts)
+            parts.append(f"已生成文件: {', '.join(files[:5])}")
+        return " | ".join(parts) if parts else "无关键信息"
 
 
 # ── 2. LoopDetector ─────────────────────────────────────────

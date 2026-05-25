@@ -8,7 +8,11 @@ import { PreviewCard } from "@/components/cards/PreviewCard";
 import { EMPTY_ARRAY } from "@/lib/constants";
 import { MessageBubble } from "./MessageBubble";
 
-export function MessageList() {
+interface Props {
+  onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
+}
+
+export function MessageList({ onModify }: Props) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const messages = useChatStore((s) =>
     activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
@@ -47,7 +51,7 @@ export function MessageList() {
         </div>
       )}
       {messages.map((msg, i) => (
-        <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} />
+        <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} onModify={onModify} />
       ))}
 
       {showPlanCard && (
