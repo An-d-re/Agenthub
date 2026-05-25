@@ -56,7 +56,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
           任务计划 · 确认后执行
         </div>
 
-        {tasks.map((task, i) => {
+        {tasks.map((task) => {
           const isChecked = checked.has(task.id);
           return (
             <div

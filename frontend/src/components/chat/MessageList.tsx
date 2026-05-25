@@ -11,7 +11,7 @@ import { MessageBubble } from "./MessageBubble";
 
 interface Props {
   onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
-  onPlanAction?: (action: string, taskId?: string) => boolean;
+  onPlanAction?: (action: string, taskId?: string, approachName?: string) => boolean;
   onRegenerate?: (messageId: string) => void;
 }
 
@@ -38,7 +38,7 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   }, [messages, plan, confirmedPlan]);
 
   const handleSelectApproach = (approach: { name: string }) => {
-    useChatStore.getState().setPendingSend(approach.name);
+    onPlanAction?.("select_approach", undefined, approach.name);
   };
 
   const handleDagConfirm = () => {
@@ -89,7 +89,7 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
       )}
 
       {artifacts.map((a) =>
-        a.language === "html" ? (
+        ["html", "svg", "css", "javascript", "js"].includes(a.language) ? (
           <PreviewCard key={a.artifactId} artifact={a} />
         ) : (
           <DiffCard key={a.artifactId} artifact={a} />

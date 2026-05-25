@@ -102,6 +102,7 @@ export function useWebSocket(sessionId: string | null) {
             id: p.id || crypto.randomUUID(),
             sessionId: p.session_id || sessionId,
             agentId: p.agent_id,
+            agentRole: p.agent_role,
             role: p.role === "assistant" ? "agent" : (p.role || "system"),
             content: p.content,
             messageType: p.message_type || "text",
@@ -140,6 +141,8 @@ export function useWebSocket(sessionId: string | null) {
             filePath: p.file_path,
             language: p.language,
             contentPreview: p.content_preview,
+            originalContent: p.original_content,
+            modifiedContent: p.content_preview,
           });
         } else if (msg.type === "session.control") {
           if (p.action === "stopped") {
@@ -222,13 +225,13 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
-  const sendPlanAction = useCallback((action: string, taskId?: string): boolean => {
+  const sendPlanAction = useCallback((action: string, taskId?: string, approachName?: string): boolean => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: "plan.action",
-        payload: { action, task_id: taskId || "" },
-      }));
+      const payload: Record<string, string> = { action };
+      if (taskId) payload.task_id = taskId;
+      if (approachName) payload.approach_name = approachName;
+      ws.send(JSON.stringify({ type: "plan.action", payload }));
       return true;
     }
     console.warn("WebSocket 未连接，plan action 发送失败");

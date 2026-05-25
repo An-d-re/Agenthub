@@ -18,10 +18,22 @@ export function ChatPanel() {
   const setPendingSend = useChatStore((s) => s.setPendingSend);
   const agents = useAgentStore((s) => s.agents);
   const { sendMessage, sendModify, sendPlanAction, sendSessionControl } = useWebSocket(activeSessionId);
+
+  // 连接状态横幅
+  useEffect(() => {
+    if (connectionStatus === "disconnected") {
+      setConnBanner("reconnecting");
+    } else if (connectionStatus === "connected" && connBanner === "reconnecting") {
+      setConnBanner("restored");
+      const t = setTimeout(() => setConnBanner(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [connectionStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showMenu, setShowMenu] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState("");
+  const [connBanner, setConnBanner] = useState<"reconnecting"|"restored"|null>(null);
 
   const handleSend = (content: string, quoteMessageId?: string) => {
     sendMessage(content, quoteMessageId);
@@ -137,6 +149,16 @@ export function ChatPanel() {
           )}
         </div>
       </div>
+
+      {/* 连接状态横幅 */}
+      {connBanner && (
+        <div className={cn(
+          "text-center text-[12px] py-1.5 font-medium transition-all",
+          connBanner === "reconnecting" ? "bg-[#FF9F0A]/10 text-[#FF9F0A]" : "bg-[#34C759]/10 text-[#34C759]"
+        )}>
+          {connBanner === "reconnecting" ? "⚠️ 连接断开，正在重连…" : "✅ 已重新连接"}
+        </div>
+      )}
 
       <MessageList onModify={sendModify} onPlanAction={sendPlanAction} onRegenerate={handleRegenerate} />
       <MessageInput onSend={handleSend} disabled={!isConnected} />

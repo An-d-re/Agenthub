@@ -193,9 +193,14 @@ async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
 
 
 async def _handle_plan_action(session_id: str, payload: dict):
-    """Handle plan.action — confirm plan / delete task from DAG."""
+    """Handle plan.action — select approach / confirm plan / delete task from DAG."""
     action = payload.get("action", "")
-    if action == "confirm":
+    if action == "select_approach":
+        approach_name = payload.get("approach_name", "")
+        if approach_name:
+            from app.core.orchestrator import Orchestrator
+            asyncio.create_task(Orchestrator(session_id).select_approach(approach_name))
+    elif action == "confirm":
         from app.core.orchestrator import Orchestrator
         asyncio.create_task(Orchestrator(session_id).confirm_plan())
     elif action == "delete_task":

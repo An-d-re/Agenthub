@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string;
   sessionId: string;
   agentId?: string;
+  agentRole?: string;  // critic | planner | coder | reviewer
   role: "user" | "agent" | "system";
   content: string;
   messageType: string;
@@ -213,6 +214,7 @@ export const useChatStore = create<ChatState>((set) => ({
 
   clearConfirmedPlan: (sessionId) =>
     set((state) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [sessionId]: _, ...rest } = state.confirmedPlans;
       return { confirmedPlans: rest };
     }),

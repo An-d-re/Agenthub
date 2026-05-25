@@ -14,6 +14,7 @@ export function MessageInput({ onSend, disabled }: Props) {
   const [mention, setMention] = useState<{active: boolean; query: string; idx: number}>({active: false, query: "", idx: -1});
   const [highlightIdx, setHighlightIdx] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeSessionId = useChatStore(s => s.activeSessionId);
@@ -63,19 +64,29 @@ export function MessageInput({ onSend, disabled }: Props) {
     const file = e.target.files?.[0];
     if (!file || !activeSessionId) return;
     setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      await fetch(`${API_BASE}/api/sessions/${activeSessionId}/upload`, {
-        method: "POST",
-        body: formData,
-      });
-    } catch (err) {
-      console.error("文件上传失败:", err);
-    } finally {
+    setUploadProgress(0);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.upload.addEventListener("progress", (evt) => {
+      if (evt.lengthComputable) {
+        setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+      }
+    });
+    xhr.addEventListener("load", () => {
       setUploading(false);
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    });
+    xhr.addEventListener("error", () => {
+      setUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    });
+    xhr.open("POST", `${API_BASE}/api/sessions/${activeSessionId}/upload`);
+    xhr.send(formData);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -131,9 +142,15 @@ export function MessageInput({ onSend, disabled }: Props) {
           title="上传文件"
         >
           {uploading ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
-              <circle cx="12" cy="12" r="10" strokeOpacity="0.3" /><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-            </svg>
+            <div className="relative w-8 h-8 flex items-center justify-center">
+              {uploadProgress > 0 ? (
+                <span className="text-[10px] font-semibold text-[#007AFF]">{uploadProgress}%</span>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="animate-spin">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.3" /><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                </svg>
+              )}
+            </div>
           ) : (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />

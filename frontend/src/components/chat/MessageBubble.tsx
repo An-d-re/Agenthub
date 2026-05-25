@@ -10,6 +10,15 @@ import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { CodeBlock } from "./CodeBlock";
 
+// ── Role badge config ──
+
+const ROLE_CONFIG: Record<string, { icon: string; label: string; color: string; bg: string; bubble: string }> = {
+  critic:   { icon: "🔍", label: "Critic",  color: "text-[#86868B]",      bg: "bg-[#F0F0F5]",  bubble: "bg-[#F0F0F5]" },
+  planner:  { icon: "📋", label: "Planner", color: "text-[#007AFF]",      bg: "bg-[#007AFF]/8", bubble: "bg-[#007AFF]/5" },
+  coder:    { icon: "💻", label: "Coder",   color: "text-[#AF52DE]",      bg: "bg-[#AF52DE]/8", bubble: "bg-[#AF52DE]/5" },
+  reviewer: { icon: "✅", label: "Reviewer",color: "text-[#34C759]",      bg: "bg-[#34C759]/8", bubble: "bg-[#34C759]/5" },
+};
+
 interface Props {
   message: ChatMessage;
   index?: number;
@@ -97,7 +106,18 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
 
       <div className={cn("max-w-[75%] flex flex-col relative", isUser ? "items-end" : "items-start")}>
         {!isUser && (
-          <span className="text-[12px] font-semibold text-[#86868B] dark:text-[#98989D] mb-1 ml-1">{getAgentName(message.agentId)}</span>
+          <div className="flex items-center gap-1.5 mb-1 ml-1">
+            <span className="text-[12px] font-semibold text-[#86868B] dark:text-[#98989D]">{getAgentName(message.agentId)}</span>
+            {message.agentRole && ROLE_CONFIG[message.agentRole] && (
+              <span className={cn(
+                "text-[10px] font-semibold px-1.5 py-0.5 rounded-md leading-none",
+                ROLE_CONFIG[message.agentRole].bg,
+                ROLE_CONFIG[message.agentRole].color,
+              )}>
+                {ROLE_CONFIG[message.agentRole].icon} {ROLE_CONFIG[message.agentRole].label}
+              </span>
+            )}
+          </div>
         )}
         {/* 引用回复按钮（悬停显示） */}
         {!isUser && hovered && (
@@ -141,7 +161,9 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
             ? "bg-[#007AFF] text-white rounded-br-[4px]"
             : isModify
               ? "bg-[#FFF3E0] dark:bg-[#3D2910] text-[#1D1D1F] dark:text-[#F5F5F7] rounded-bl-[4px] border border-[#FFCC80] dark:border-[#664400]"
-              : isImage || isFile
+              : message.agentRole && ROLE_CONFIG[message.agentRole]
+                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[#2C2C2E] text-[#1D1D1F] dark:text-[#F5F5F7] rounded-bl-[4px]`
+                : isImage || isFile
                 ? "bg-[#F5F5F7] dark:bg-[#2C2C2E] text-[#1D1D1F] dark:text-[#F5F5F7] rounded-bl-[4px]"
                 : "bg-[#F5F5F7] dark:bg-[#2C2C2E] text-[#1D1D1F] dark:text-[#F5F5F7] rounded-bl-[4px]"
         )}>
@@ -196,6 +218,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
+                  // eslint-disable-next-line @typescript-eslint/no-unused-vars
                   code({ node, className, children, ...props }) {
                     const match = /language-(\w+)/.exec(className || "");
                     const lang = match ? match[1] : "";

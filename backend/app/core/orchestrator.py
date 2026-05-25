@@ -105,6 +105,15 @@ class Orchestrator:
                     await self._publish_error("无法获取或创建 Plan")
                     return
 
+                # 单 Agent 群聊提示
+                agent_ids = await self._get_session_agent_ids(db)
+                if len(agent_ids) < 2 and plan.phase == "clarify":
+                    await self._send_system_message(
+                        db,
+                        "💡 提示：当前群聊只有 1 个 Agent，它将同时扮演 Critic/Planner/Coder/Reviewer 多重角色。"
+                        "建议添加更多 Agent 以获得更好的协作效果。"
+                    )
+
                 plan.updated_at = _utcnow()
                 phase = plan.phase
 
@@ -191,6 +200,7 @@ class Orchestrator:
             "payload": {
                 "id": msg.id,
                 "agent_id": agent.id,
+                "agent_role": "critic",
                 "role": "agent",
                 "content": content,
                 "message_type": "system",
@@ -447,6 +457,39 @@ class Orchestrator:
             + (f" 剩余 {len(new_dag)} 个任务。" if new_dag else " 所有任务已清空。")
         )
 
+    async def select_approach(self, approach_name: str) -> None:
+        """外部入口：通过 WS plan.action 选择方案。"""
+        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with lock:
+            async with async_session() as db:
+                plan = await self._get_or_create_active_plan(db)
+                if not plan or plan.phase != "comparison":
+                    return
+                approaches = plan.approaches or []
+                selected = None
+                for a in approaches:
+                    if a.get("name", "") == approach_name or approach_name in a.get("name", ""):
+                        selected = a
+                        break
+                if not selected:
+                    # 尝试按序号匹配
+                    try:
+                        idx = int(approach_name.strip()) - 1
+                        if 0 <= idx < len(approaches):
+                            selected = approaches[idx]
+                    except ValueError:
+                        pass
+                if not selected:
+                    return
+                plan.selected_approach = selected.get("name", "")
+                plan.phase = "confirmed"
+                await self._send_system_message(
+                    db, f"已选择方案：{selected.get('name', '')}。正在生成任务计划…"
+                )
+                await self._phase_confirmed(db, plan, "")
+                await db.commit()
+            await self._flush_pending_events()
+
     async def confirm_plan(self) -> None:
         """外部入口：通过 WS plan.action 确认计划。"""
         lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
@@ -653,7 +696,7 @@ class Orchestrator:
                     lines.extend(f"  • `{a['file_path']}`" for a in artifacts)
                 else:
                     lines.append(f"\n{preview}")
-                await self._send_system_message(db, "\n".join(lines))
+                await self._send_system_message(db, "\n".join(lines), agent_id=agent.id if agent else "", agent_role="coder")
 
             except Exception as e:
                 logger.exception("任务执行失败: %s", e)
@@ -813,26 +856,32 @@ class Orchestrator:
             for m in msgs
         ]
 
-    async def _send_system_message(self, db: AsyncSession, content: str) -> Message:
+    async def _send_system_message(self, db: AsyncSession, content: str, agent_id: str = "", agent_role: str = "") -> Message:
         """持久化系统消息。事件在事务 commit 后统一发布。"""
         msg = Message(
             session_id=self.session_id,
-            role="system",
+            agent_id=agent_id or None,
+            role="system" if not agent_id else "agent",
             content=content,
             message_type="system",
         )
         db.add(msg)
         await db.flush()
+        payload: dict = {
+            "id": msg.id,
+            "role": "system" if not agent_id else "agent",
+            "content": content,
+            "message_type": "system",
+            "created_at": _utcnow().isoformat(),
+        }
+        if agent_id:
+            payload["agent_id"] = agent_id
+        if agent_role:
+            payload["agent_role"] = agent_role
         self._pending_events.append({
             "type": "chat.message",
             "session_id": self.session_id,
-            "payload": {
-                "id": msg.id,
-                "role": "system",
-                "content": content,
-                "message_type": "system",
-                "created_at": _utcnow().isoformat(),
-            },
+            "payload": payload,
         })
         return msg
 
@@ -971,11 +1020,24 @@ class Orchestrator:
             # 尝试从注释或上下文中提取文件路径
             file_path = self._guess_file_path(content, code, language)
 
+            # 查找同 session 同路径的旧 artifact，用于 diff 对比
+            original = ""
+            prev_result = await db.execute(
+                select(Artifact).where(
+                    Artifact.session_id == self.session_id,
+                    Artifact.file_path == file_path,
+                    Artifact.id != task.id,
+                ).order_by(Artifact.created_at.desc()).limit(1)
+            )
+            prev_artifact = prev_result.scalar_one_or_none()
+            if prev_artifact and prev_artifact.modified_content:
+                original = prev_artifact.modified_content
+
             artifact = Artifact(
                 task_id=task.id,
                 session_id=self.session_id,
                 file_path=file_path,
-                original_content="",
+                original_content=original,
                 modified_content=code,
                 language=language,
                 artifact_type="code",
@@ -987,6 +1049,7 @@ class Orchestrator:
                 "id": artifact.id,
                 "file_path": artifact.file_path,
                 "language": artifact.language,
+                "original_content": original,
                 "modified_content": code,
             }
             artifacts.append(art_data)
@@ -999,6 +1062,7 @@ class Orchestrator:
                     "task_id": task.id,
                     "file_path": file_path,
                     "language": language,
+                    "original_content": original,
                     "content_preview": code[:200],
                 },
             })
@@ -1086,6 +1150,20 @@ class Orchestrator:
             review_data = self._extract_json(review_resp.content)
 
             if review_data and not review_data.get("passed", True):
+                if task.retry_count >= self.MAX_TASK_RETRIES + 1:
+                    task.status = "dispute"
+                    task.error_message = review_data.get("feedback", "Reviewer 连续不通过")
+                    await db.flush()
+                    await self._publish_task_update(task, "dispute")
+                    await self._send_system_message(
+                        db,
+                        f"❌ 任务「{task.title}」Reviewer 审查 {task.retry_count + 1} 次仍未通过。\n"
+                        f"反馈：{review_data.get('feedback', '')[:200]}\n"
+                        "输入「重试」重新执行。",
+                        agent_id=reviewer_agent.id if reviewer_agent else "",
+                        agent_role="reviewer",
+                    )
+                    return False
                 task.status = "retry"
                 task.retry_count += 1
                 task.error_message = review_data.get("feedback", "")
@@ -1094,7 +1172,9 @@ class Orchestrator:
                 await self._send_system_message(
                     db,
                     f"🔍 Reviewer: {review_data.get('feedback', '审查未通过')}\n"
-                    f"📝 建议: {review_data.get('suggested_changes', '')[:300]}"
+                    f"📝 建议: {review_data.get('suggested_changes', '')[:300]}",
+                    agent_id=reviewer_agent.id if reviewer_agent else "",
+                    agent_role="reviewer",
                 )
                 return False
         except Exception as e:

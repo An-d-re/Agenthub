@@ -58,16 +58,52 @@ export function PreviewCard({ artifact }: Props) {
       );
       if (res.ok) {
         const data = await res.json();
-        if (data.status === "running") {
-          setDeployUrl(`${API_BASE}${data.url}`);
-        }
+        // 轮询直到运行或失败
+        const poll = async (retries = 10) => {
+          const sr = await fetch(`${API_BASE}/api/deployments?session_id=${activeSessionId}`);
+          if (sr.ok) {
+            const list = await sr.json();
+            const d = list.find((item: {id:string;status:string;url:string}) => item.id === data.id);
+            if (d) {
+              if (d.status === "running") {
+                setDeployUrl(`${API_BASE}${d.url}`);
+                setDeploying(false);
+                return;
+              }
+              if (d.status === "failed") {
+                setDeploying(false);
+                return;
+              }
+            }
+          }
+          if (retries > 0) setTimeout(() => poll(retries - 1), 2000);
+          else setDeploying(false);
+        };
+        setTimeout(() => poll(), 2000);
       }
     } catch (e) {
       console.warn("部署失败", e);
-    } finally {
       setDeploying(false);
     }
   };
+
+  const getPreviewContent = () => {
+    const code = html || artifact.contentPreview || "";
+    const lang = artifact.language || "text";
+
+    if (lang === "html" || !code) return code;
+    if (lang === "svg") return code;
+
+    // 包装非 HTML 内容为可预览页面
+    if (lang === "css") {
+      return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${code}</style></head><body><div class="preview">CSS 样式预览 — 应用到本页面的样式</div></body></html>`;
+    }
+    return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Preview</title></head><body><pre style="font-family:monospace;padding:16px;white-space:pre-wrap;">${escapeHtml(code)}</pre></body></html>`;
+  };
+
+  function escapeHtml(s: string) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
 
   const preset = DEVICE_PRESETS.find(p => p.key === device) || DEVICE_PRESETS[2];
   const isDesktop = preset.key === "desktop";
@@ -147,7 +183,7 @@ export function PreviewCard({ artifact }: Props) {
               style={isDesktop ? undefined : { width: preset.w, height: preset.h, maxHeight: "100%" }}
             >
               <iframe
-                srcDoc={html || artifact.contentPreview || ""}
+                srcDoc={getPreviewContent()}
                 sandbox="allow-scripts allow-same-origin"
                 className="w-full h-full border-0"
                 title="preview"
