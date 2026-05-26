@@ -6,9 +6,9 @@ import { useChatStore } from "@/stores/chatStore";
 import { API_BASE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
-interface Props { onSend: (content: string, quoteMessageId?: string) => void; disabled?: boolean; }
+interface Props { onSend: (content: string, quoteMessageId?: string) => void; disabled?: boolean; isThinking?: boolean; onStop?: () => void; }
 
-export function MessageInput({ onSend, disabled }: Props) {
+export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
   const [text, setText] = useState("");
   const agents = useAgentStore(s => s.agents);
   const [mention, setMention] = useState<{active: boolean; query: string; idx: number}>({active: false, query: "", idx: -1});
@@ -165,6 +165,15 @@ export function MessageInput({ onSend, disabled }: Props) {
           className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[#636366] dark:text-[var(--bg-secondary)] leading-relaxed py-1.5"
           rows={1} disabled={disabled}
         />
+        {isThinking && (
+          <button
+            onClick={onStop}
+            className="w-8 h-8 rounded-full bg-[var(--danger)] text-white flex items-center justify-center transition-all duration-150 hover:bg-[#E0352A] active:scale-90 shrink-0 mb-0.5"
+            title="停止生成"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+          </button>
+        )}
         <button
           onClick={send}
           disabled={disabled || !text.trim()}

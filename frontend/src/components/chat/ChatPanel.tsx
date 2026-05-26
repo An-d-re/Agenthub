@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
 import { useAgentStore } from "@/stores/agentStore";
-import { API_BASE } from "@/lib/constants";
+import { API_BASE, EMPTY_ARRAY } from "@/lib/constants";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { cn } from "@/lib/utils";
@@ -62,6 +62,11 @@ export function ChatPanel() {
 
   const activeSession = sessions.find(s => s.id === activeSessionId);
   const isConnected = connectionStatus === "connected";
+
+  // Agent 思考中：最后一条消息来自用户
+  const messages = useChatStore(s => activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY);
+  const lastMsg = messages[messages.length - 1];
+  const isThinking = lastMsg?.role === "user";
 
   const [sessionAgents, setSessionAgents] = useState<string[]>([]);
   useEffect(() => {
@@ -137,7 +142,7 @@ export function ChatPanel() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 z-50 animate-fade-in"
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 z-[100] animate-fade-in"
                   onClick={()=>setShowMenu(false)}>
                   <button onClick={()=>setShowMembers(true)}
                     className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">管理成员</button>
@@ -161,7 +166,7 @@ export function ChatPanel() {
       )}
 
       <MessageList onModify={sendModify} onPlanAction={sendPlanAction} onRegenerate={handleRegenerate} />
-      <MessageInput onSend={handleSend} disabled={!isConnected} />
+      <MessageInput onSend={handleSend} disabled={!isConnected} isThinking={isThinking} onStop={() => sendSessionControl("stop")} />
 
       {showMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>
