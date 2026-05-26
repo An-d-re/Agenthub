@@ -23,7 +23,9 @@ class Task(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
     assigned_agent_id = Column(UUID(36), ForeignKey("agents.id", ondelete="SET NULL"), nullable=True)
-    status = Column(String(20), default="pending")  # pending→in_progress→review→done|blocked|retry|dispute
+    status = Column(
+        String(20), default="pending"
+    )  # pending→ready→running→reviewing→done / failed/dispute/blocked/cancelled
     round = Column(Integer, default=1)
     priority = Column(Integer, default=0)
     retry_count = Column(Integer, default=0)

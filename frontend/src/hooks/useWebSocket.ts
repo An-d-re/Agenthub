@@ -130,9 +130,14 @@ export function useWebSocket(sessionId: string | null) {
           store.upsertTask(sessionId, {
             taskId: p.task_id,
             title: p.title || "",
+            description: p.description || "",
             status: p.status || "pending",
             result: p.result,
             error: p.error,
+            retryCount: p.retry_count ?? 0,
+            agentId: p.agent_id || "",
+            startedAt: p.started_at || "",
+            completedAt: p.completed_at || "",
           });
         } else if (msg.type === "artifact.created") {
           store.addArtifact(sessionId, {

@@ -58,9 +58,14 @@ export interface TraceSpan {
 export interface TaskItem {
   taskId: string;
   title: string;
-  status: "pending" | "in_progress" | "review" | "done" | "blocked" | "retry" | "dispute";
+  description?: string;
+  status: "pending" | "running" | "reviewing" | "done" | "blocked" | "retrying" | "failed" | "dispute" | "cancelled";
   result?: string;
   error?: string;
+  retryCount?: number;
+  agentId?: string;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface DAGTask {

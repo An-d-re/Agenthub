@@ -26,6 +26,8 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [customTags, setCustomTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
   const addAgent = useAgentStore(s => s.addAgent);
   const setAgents = useAgentStore(s => s.setAgents);
   const agents = useAgentStore(s => s.agents);
@@ -35,9 +37,10 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
       setName(editAgent.name);
       setSystemPrompt(editAgent.systemPrompt);
       setSelectedSkills(editAgent.skills || []);
+      setCustomTags(editAgent.capabilityTags || []);
       setAvatarUrl(editAgent.avatarUrl || "");
     } else {
-      setName(""); setSystemPrompt(""); setSelectedSkills([]); setAvatarUrl("");
+      setName(""); setSystemPrompt(""); setSelectedSkills([]); setCustomTags([]); setAvatarUrl("");
     }
     setError("");
   }, [editAgent, open]);
@@ -51,6 +54,20 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
     return skill ? [skill.tag] : [];
   }).filter((v, i, a) => a.indexOf(v) === i);
 
+  const allTags = [...derivedTags, ...customTags].filter((v, i, a) => a.indexOf(v) === i);
+
+  const addTag = () => {
+    const t = tagInput.trim().toLowerCase();
+    if (t && !allTags.includes(t) && allTags.length < 10) {
+      setCustomTags([...customTags, t]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (tag: string) => {
+    setCustomTags(customTags.filter(t => t !== tag));
+  };
+
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true); setError("");
@@ -61,7 +78,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
         adapter_type: "deepseek",
         system_prompt: systemPrompt,
         skills: selectedSkills,
-        capability_tags: derivedTags,
+        capability_tags: allTags,
         avatar_url: avatarUrl,
       };
       let res;
@@ -133,7 +150,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
               <div className="mt-4">
                 <p className="text-[11px] text-[var(--text-secondary)] mb-2 text-center">能力标签</p>
                 <div className="flex flex-wrap gap-1 justify-center">
-                  {derivedTags.length > 0 ? derivedTags.map(t => (
+                  {allTags.length > 0 ? allTags.map(t => (
                     <span key={t} className="text-[11px] bg-[var(--border)] text-[var(--text-primary)] rounded-md px-1.5 py-0.5">{t}</span>
                   )) : (
                     <span className="text-[11px] text-[var(--text-tertiary)]">无能力标签</span>
@@ -168,6 +185,34 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
                   style={{ resize: "vertical" }}
                 />
                 <div className="text-right text-[11px] text-[var(--text-tertiary)] mt-1">{systemPrompt.length}/2000</div>
+              </div>
+
+              {/* Capability Tags */}
+              <div>
+                <label className="text-[13px] font-medium text-[var(--text-primary)] mb-2 block">能力标签 <span className="text-[var(--text-tertiary)] font-normal">(最多 10 个)</span></label>
+                <div className="flex gap-2 mb-2">
+                  <input value={tagInput} onChange={e => setTagInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                    placeholder="输入技术标签，如 python, react, sql..."
+                    className="flex-1 px-3 py-2 rounded-[8px] bg-[var(--bg-secondary)] border-0 outline-none text-[13px] placeholder:text-[var(--text-tertiary)] focus:ring-2 focus:ring-[var(--accent)]/20" />
+                  <button onClick={addTag}
+                    className="px-4 py-2 rounded-[8px] bg-[var(--accent)] text-white text-[13px] font-medium hover:bg-[var(--accent-hover)] transition-colors">添加</button>
+                </div>
+                {allTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTags.map(t => (
+                      <span key={t} className={cn(
+                        "inline-flex items-center gap-1 text-[12px] rounded-md px-2 py-1",
+                        derivedTags.includes(t) ? "bg-[var(--accent)]/10 text-[var(--accent)]" : "bg-[var(--bg-secondary)] text-[var(--text-primary)]"
+                      )}>
+                        {t}
+                        {customTags.includes(t) && (
+                          <button onClick={() => removeTag(t)} className="w-3.5 h-3.5 rounded-full flex items-center justify-center hover:bg-red-100 text-[var(--text-tertiary)] hover:text-[var(--danger)]">&times;</button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Skills */}
