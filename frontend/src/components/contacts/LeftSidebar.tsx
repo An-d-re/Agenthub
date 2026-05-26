@@ -101,8 +101,7 @@ export function LeftSidebar() {
     try {
       const r = await fetch(`${API_BASE}/api/sessions/${sid}`, {method:"DELETE"});
       if (r.ok) {
-        const allSessions = useChatStore.getState().sessions;
-        if (activeSessionId === sid) { const rem = allSessions.filter(s2 => s2.id !== sid); if (rem.length > 0) setActiveSession(rem[0].id); }
+        if (activeSessionId === sid) setActiveSession("");
         const sr = await fetch(`${API_BASE}/api/sessions`); if (sr.ok) useChatStore.getState().setSessions(await sr.json());
       }
     } catch {}
