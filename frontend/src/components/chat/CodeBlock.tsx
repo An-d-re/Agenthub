@@ -122,7 +122,7 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
           <button
             onClick={handleSendModify}
             disabled={!instruction.trim()}
-            className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12px] font-medium hover:bg-[#0066D6] disabled:opacity-30 transition-all"
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[12px] font-medium hover:bg-[var(--accent-hover)] disabled:opacity-30 transition-all"
           >
             发送
           </button>

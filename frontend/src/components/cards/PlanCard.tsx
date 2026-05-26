@@ -38,7 +38,7 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
                 "hover:border-accent/30",
                 isChosen
                   ? "border-accent bg-accent/[0.06] dark:bg-accent/[0.12] shadow-sm shadow-accent/10"
-                  : "border-border dark:border-[#38383A] bg-white/[0.01] dark:bg-[#2C2C2E]"
+                  : "border-border dark:border-[#38383A] bg-white/[0.01] dark:bg-[var(--bg-secondary)]"
               )}
             >
               <div className="flex items-center justify-between mb-2">

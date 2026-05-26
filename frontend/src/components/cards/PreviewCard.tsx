@@ -134,7 +134,7 @@ export function PreviewCard({ artifact }: Props) {
                   "px-3 py-1 rounded-[8px] text-[11px] font-medium transition-all",
                   deployUrl
                     ? "bg-[var(--success)]/10 text-[var(--success)]"
-                    : "bg-[var(--accent)] text-white hover:bg-[#0066D6] disabled:opacity-50"
+                    : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50"
                 )}
               >
                 {deploying ? "部署中..." : deployUrl ? "✓ 已部署" : "🚀 一键部署"}
@@ -158,13 +158,13 @@ export function PreviewCard({ artifact }: Props) {
           )}
 
           {/* Device switcher */}
-          <div className="flex items-center justify-center gap-1 bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] rounded-xl p-1 w-fit mx-auto">
+          <div className="flex items-center justify-center gap-1 bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] rounded-xl p-1 w-fit mx-auto">
             {DEVICE_PRESETS.map((p) => (
               <button
                 key={p.key}
                 onClick={() => setDevice(p.key)}
                 className={cn(
-                  "px-3 py-1.5 rounded-[10px] text-[12px] font-medium transition-all",
+                  "px-3 py-1.5 rounded-[12px] text-[12px] font-medium transition-all",
                   device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
                 )}
               >

@@ -196,7 +196,7 @@ export function LeftSidebar() {
 
       {/* Search */}
       <div className="p-3 shrink-0">
-        <div className="flex items-center gap-2 bg-[var(--border)] dark:bg-[#2C2C2E] rounded-[10px] px-3 py-2">
+        <div className="flex items-center gap-2 bg-[var(--border)] dark:bg-[var(--bg-secondary)] rounded-[12px] px-3 py-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[var(--text-secondary)] dark:text-[var(--bg-secondary)] dark:placeholder:text-[#636366]" placeholder={`搜索${TABS.find(t => t.key === tab)?.label || ""}`} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
@@ -223,7 +223,7 @@ export function LeftSidebar() {
                     <div key={agent.id}
                       onClick={() => { setSelectedContact(agent.id); setTab("topics"); }}
                       onContextMenu={e => handleContextMenu(e, agent.id)}
-                      className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[#2C2C2E] shadow-sm")}>
+                      className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                       <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-lg shrink-0", AGENT_COLORS[agent.adapterType] || "from-gray-400 to-gray-500")}>
                         {agent.roleType === "custom" ? (agent.avatarUrl ? <img src={agent.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={agent.name} /> : "👤") : (AGENT_EMOJI[agent.adapterType] || "\u{1F4A1}")}
@@ -253,7 +253,7 @@ export function LeftSidebar() {
                   const isActive = activeSessionId === s.id;
                   return (
                     <div key={s.id} onClick={() => setActiveSession(s.id)}
-                      className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[#2C2C2E] shadow-sm")}>
+                      className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                       <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[#3A3A3C]">
                         <span className="text-sm font-bold text-[var(--text-secondary)]">#</span>
@@ -302,7 +302,7 @@ export function LeftSidebar() {
                       const isActive = activeSessionId === s.id;
                       return (
                         <div key={s.id} onClick={() => setActiveSession(s.id)}
-                          className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[10px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[#2C2C2E] shadow-sm")}>
+                          className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                           {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                           <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 bg-gradient-to-br from-blue-400 to-blue-500">
                             <span className="text-white text-[11px] font-semibold">@</span>
@@ -331,10 +331,10 @@ export function LeftSidebar() {
           onClick={bottomBtn.onClick}
           disabled={bottomBtn.disabled}
           className={cn(
-            "w-full py-2.5 rounded-[10px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
+            "w-full py-2.5 rounded-[12px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
             bottomBtn.disabled
               ? "bg-[#C7C7CC] dark:bg-[#3A3A3C] text-white dark:text-[#636366] cursor-not-allowed"
-              : "bg-[var(--accent)] text-white hover:bg-[#0066D6]"
+              : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
           )}
         >
           {bottomBtn.label}
@@ -350,7 +350,7 @@ export function LeftSidebar() {
       {/* Agent Delete Confirmation */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-white dark:bg-[#2C2C2E] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
+          <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
             <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] mb-2">删除助手</h3>
             <p className="text-[14px] text-[var(--text-secondary)] dark:text-[#98989D] mb-1">
               删除该助手将<strong className="text-[var(--danger)]">同时删除其所有话题</strong>，是否继续？
@@ -369,7 +369,7 @@ export function LeftSidebar() {
 
       {/* Context menu */}
       {contextMenu && (
-        <div className="fixed z-50 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
+        <div className="fixed z-50 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
           <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">编辑</button>
           <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
         </div>

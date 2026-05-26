@@ -69,7 +69,7 @@ export default function Home() {
       {/* Theme toggle */}
       <button
         onClick={toggle}
-        className="fixed bottom-4 right-4 w-10 h-10 rounded-full bg-white dark:bg-[#2C2C2E] border border-[var(--border)] dark:border-[#38383A] shadow-md flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)] transition-all z-50"
+        className="fixed bottom-4 right-4 w-10 h-10 rounded-full bg-white dark:bg-[var(--bg-secondary)] border border-[var(--border)] dark:border-[#38383A] shadow-md flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)] transition-all z-50"
         title={dark ? "切换到浅色模式" : "切换到暗色模式"}
       >
         {dark ? (

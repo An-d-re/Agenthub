@@ -83,7 +83,7 @@ export function TracePanel() {
           <select
             value={selectedTrace || ""}
             onChange={e => setSelectedTrace(e.target.value || null)}
-            className="mt-2 w-full text-[11px] bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] dark:text-[var(--bg-secondary)] border-0 rounded-lg px-2 py-1.5 outline-none"
+            className="mt-2 w-full text-[11px] bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] dark:text-[var(--bg-secondary)] border-0 rounded-lg px-2 py-1.5 outline-none"
           >
             <option value="">全部 Trace ({sortedTraces.length})</option>
             {sortedTraces.map(([tid, tSpans]) => (
@@ -105,7 +105,7 @@ export function TracePanel() {
 
           return (
             <div key={tid} className="border-t border-[var(--border)] dark:border-[#38383A] first:border-t-0">
-              <div className="px-4 py-1.5 flex justify-between bg-[var(--bg-tertiary)] dark:bg-[#2C2C2E]">
+              <div className="px-4 py-1.5 flex justify-between bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)]">
                 <span className="text-[10px] font-mono text-[var(--text-secondary)] dark:text-[#98989D]">{tid.slice(0, 8)}</span>
                 <span className="text-[10px] text-[var(--text-tertiary)] dark:text-[#636366]">{displaySpans.length} spans · {ms(traceTotal)}</span>
               </div>
@@ -117,7 +117,7 @@ export function TracePanel() {
                 const indent = s.parent_span_id ? 16 : 0;
 
                 return (
-                  <div key={s.span_id} className="px-4 py-1.5 hover:bg-[var(--bg-tertiary)] dark:hover:bg-[#2C2C2E] transition-colors"
+                  <div key={s.span_id} className="px-4 py-1.5 hover:bg-[var(--bg-tertiary)] dark:hover:bg-[var(--bg-secondary)] transition-colors"
                     style={{ paddingLeft: `${16 + indent}px` }}>
                     <div className="flex items-center gap-2 text-[11px]">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />

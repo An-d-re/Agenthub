@@ -127,7 +127,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-white dark:focus-within:bg-[#3A3A3C] transition-all duration-200">
+      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-white dark:focus-within:bg-[#3A3A3C] transition-all duration-200">
         <input
           ref={fileInputRef}
           type="file"
@@ -168,7 +168,7 @@ export function MessageInput({ onSend, disabled }: Props) {
         <button
           onClick={send}
           disabled={disabled || !text.trim()}
-          className="w-8 h-8 rounded-full bg-[var(--accent)] text-white flex items-center justify-center transition-all duration-150 hover:bg-[#0066D6] active:scale-90 disabled:opacity-30 disabled:active:scale-100 shrink-0 mb-0.5"
+          className="w-8 h-8 rounded-full bg-[var(--accent)] text-white flex items-center justify-center transition-all duration-150 hover:bg-[var(--accent-hover)] active:scale-90 disabled:opacity-30 disabled:active:scale-100 shrink-0 mb-0.5"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
@@ -176,7 +176,7 @@ export function MessageInput({ onSend, disabled }: Props) {
 
       {/* @Mention dropdown */}
       {mention.active && filteredAgents.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
           {filteredAgents.map((agent, i) => (
             <button
               key={agent.id}

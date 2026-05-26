@@ -77,7 +77,7 @@ export function GroupEditor({ open, onClose }: Props) {
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="mt-2 w-full bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] dark:ring-[#38383A] focus:ring-[var(--accent)] transition-all"
+              className="mt-2 w-full bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] dark:ring-[#38383A] focus:ring-[var(--accent)] transition-all"
               placeholder="输入群聊名称"
               maxLength={30}
             />
@@ -98,7 +98,7 @@ export function GroupEditor({ open, onClose }: Props) {
                       "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-left",
                       checked
                         ? "bg-[var(--accent)]/8 ring-1 ring-[var(--accent)]/20"
-                        : "hover:bg-[var(--bg-secondary)] dark:hover:bg-[#2C2C2E]"
+                        : "hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-secondary)]"
                     )}
                   >
                     <div className={cn(

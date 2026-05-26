@@ -62,7 +62,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
             <div
               key={task.id}
               className={cn(
-                "rounded-2xl border p-4 transition-all duration-200 bg-white dark:bg-[#2C2C2E]",
+                "rounded-2xl border p-4 transition-all duration-200 bg-white dark:bg-[var(--bg-secondary)]",
                 isChecked
                   ? "border-[var(--border)] dark:border-[#38383A] hover:border-accent/30"
                   : "border-[#E5E5E7]/50 dark:border-[#38383A]/50 opacity-50"

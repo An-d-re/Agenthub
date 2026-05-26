@@ -99,7 +99,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/10" onClick={onClose} />
       {/* Slide-in panel */}
-      <div className="relative ml-auto w-[min(720px,65vw)] h-full bg-white shadow-2xl animate-slide-in-right flex flex-col"
+      <div className="relative ml-auto w-[min(720px,65vw)] h-full bg-white dark:bg-[var(--bg-primary)] shadow-2xl animate-slide-in-right flex flex-col text-[var(--text-primary)] dark:text-[var(--bg-secondary)]"
         style={{ animation: "slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border)]">
@@ -107,10 +107,10 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
             <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <h2 className="text-[17px] font-semibold">{editAgent ? "编辑 Agent" : "创建自定义 Agent"}</h2>
+            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{editAgent ? "编辑 Agent" : "创建自定义 Agent"}</h2>
           </div>
           <button onClick={handleSave} disabled={saving || !name.trim()}
-            className="px-6 py-2.5 rounded-[10px] bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+            className="px-6 py-2.5 rounded-[12px] bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
             {saving ? "保存中..." : "保存"}
           </button>
         </div>
@@ -150,7 +150,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
                 <input value={name} onChange={e => setName(e.target.value.slice(0, 20))}
                   placeholder="例如：SQL 优化专家"
                   className={cn(
-                    "w-full px-4 py-3 rounded-[10px] bg-[var(--bg-secondary)] border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] transition-colors focus:bg-white focus:ring-2",
+                    "w-full px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] transition-colors focus:bg-white dark:focus:bg-[var(--bg-secondary)] focus:ring-2",
                     name.length >= 20 ? "ring-2 ring-[#FF3B30]" : "focus:ring-[var(--accent)]/20"
                   )} />
                 <div className="flex justify-between mt-1">
@@ -164,7 +164,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
                 <label className="text-[13px] font-medium text-[var(--text-primary)] mb-1.5 block">系统 Prompt</label>
                 <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value.slice(0, 2000))}
                   placeholder="设定 Agent 的角色、个性、知识范围..."
-                  className="w-full px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] border-0 outline-none text-[14px] placeholder:text-[var(--text-tertiary)] resize-y min-h-[200px] leading-relaxed transition-colors focus:bg-white focus:ring-2 focus:ring-[var(--accent)]/20"
+                  className="w-full px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] border-0 outline-none text-[14px] placeholder:text-[var(--text-tertiary)] resize-y min-h-[200px] leading-relaxed transition-colors focus:bg-white dark:focus:bg-[var(--bg-secondary)] focus:ring-2 focus:ring-[var(--accent)]/20"
                   style={{ resize: "vertical" }}
                 />
                 <div className="text-right text-[11px] text-[var(--text-tertiary)] mt-1">{systemPrompt.length}/2000</div>

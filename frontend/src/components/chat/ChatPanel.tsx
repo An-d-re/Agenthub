@@ -137,7 +137,7 @@ export function ChatPanel() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[#2C2C2E] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 z-50 animate-fade-in"
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 z-50 animate-fade-in"
                   onClick={()=>setShowMenu(false)}>
                   <button onClick={()=>setShowMembers(true)}
                     className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">管理成员</button>
@@ -165,7 +165,7 @@ export function ChatPanel() {
 
       {showMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>
-          <div className="bg-white dark:bg-[#2C2C2E] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e=>e.stopPropagation()}>
+          <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e=>e.stopPropagation()}>
             <h3 className="text-[17px] font-semibold dark:text-[var(--bg-secondary)] mb-4">群成员</h3>
             <div className="space-y-2 mb-4">
               {sessionAgents.map(aid => {
@@ -186,7 +186,7 @@ export function ChatPanel() {
               <div className="space-y-1">
                 {agents.filter(a => !sessionAgents.includes(a.id)).map(a => (
                   <button key={a.id} onClick={()=>handleAddMember(a.id)}
-                    className="w-full text-left px-3 py-2 rounded-[10px] text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors flex items-center gap-2">
+                    className="w-full text-left px-3 py-2 rounded-[12px] text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors flex items-center gap-2">
                     <span className="text-lg">{a.adapterType==="deepseek"?"🧠":a.adapterType==="anthropic"?"✨":"🔧"}</span>
                     {a.name}
                   </button>
@@ -194,7 +194,7 @@ export function ChatPanel() {
               </div>
             </div>
             <button onClick={()=>setShowMembers(false)}
-              className="w-full mt-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[#0066D6] transition-colors">完成</button>
+              className="w-full mt-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[var(--accent-hover)] transition-colors">完成</button>
           </div>
         </div>
       )}

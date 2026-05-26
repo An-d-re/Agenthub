@@ -77,7 +77,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     return (
       <motion.div {...bubbleSpring} transition={{ ...bubbleSpring.transition, delay: index * 0.03 }}
         className="flex justify-center w-full my-2">
-        <div className="max-w-[70%] text-center text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] bg-[var(--bg-tertiary)] dark:bg-[#2C2C2E] px-5 py-2 rounded-2xl">
+        <div className="max-w-[70%] text-center text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)] px-5 py-2 rounded-2xl">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
       </motion.div>
@@ -106,7 +106,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     >
       <div className={cn(
         "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
-        isUser ? "bg-[#007AFF]/10" : "bg-[var(--bg-secondary)] dark:bg-[#2C2C2E]"
+        isUser ? "bg-[#007AFF]/10" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]"
       )}>
         {isUser ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -135,7 +135,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
           <div className="absolute -right-8 top-1 flex flex-col gap-1 z-10">
             <button
               onClick={handleReply}
-              className="w-6 h-6 rounded-full bg-white border border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all"
+              className="w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all"
               title="引用回复"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -145,7 +145,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
             {onRegenerate && (
               <button
                 onClick={() => onRegenerate(message.id)}
-                className="w-6 h-6 rounded-full bg-white border border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--success)] hover:border-[#34C759]/30 transition-all"
+                className="w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--success)] hover:border-[#34C759]/30 transition-all"
                 title="重新生成"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -158,7 +158,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
         {isUser && hovered && (
           <button
             onClick={handleReply}
-            className="absolute -left-8 top-1 w-6 h-6 rounded-full bg-white border border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all z-10"
+            className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all z-10"
             title="引用回复"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -173,10 +173,10 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
             : isModify
               ? "bg-[#FFF3E0] dark:bg-[#3D2910] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px] border border-[#FFCC80] dark:border-[#664400]"
               : message.agentRole && ROLE_CONFIG[message.agentRole]
-                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[#2C2C2E] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]`
+                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]`
                 : isImage || isFile
-                ? "bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
-                : "bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
+                ? "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
+                : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
         )}>
           {/* 被引用消息预览 */}
           {quotedMessage && !isImage && !isFile && (
@@ -199,7 +199,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               href={`${API_BASE}${message.fileUrl}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-3 p-3 rounded-xl bg-white border border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm transition-all max-w-[320px]"
+              className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm transition-all max-w-[320px]"
             >
               <div className="w-10 h-10 rounded-xl bg-[#007AFF]/10 flex items-center justify-center shrink-0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round">

@@ -70,7 +70,7 @@ export function TaskPipeline() {
             {active.map(t => {
               const c = S[t.status]||S.pending;
               return (
-                <div key={t.taskId} className={cn("flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[#2C2C2E] transition-colors",t.status==="in_progress"&&"bg-[var(--bg-secondary)] dark:bg-[#2C2C2E]")}>
+                <div key={t.taskId} className={cn("flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[var(--bg-secondary)] transition-colors",t.status==="in_progress"&&"bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]")}>
                   <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0",c.dot)} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[14px] truncate dark:text-[var(--bg-secondary)]">{t.title}</div>
@@ -90,7 +90,7 @@ export function TaskPipeline() {
             {pending.map(t => {
               const c = S.pending;
               return (
-                <div key={t.taskId} className="flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[#2C2C2E] transition-colors">
+                <div key={t.taskId} className="flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[var(--bg-secondary)] transition-colors">
                   <div className={cn("w-2.5 h-2.5 rounded-full mt-1.5 shrink-0",c.dot)} />
                   <div className="min-w-0 flex-1">
                     <div className="text-[14px] text-[var(--text-tertiary)] dark:text-[#636366] truncate">{t.title}</div>
@@ -102,7 +102,7 @@ export function TaskPipeline() {
           </div>
         )}
         {tasks.filter(t=>t.status==="done").map(t => (
-          <div key={t.taskId} className="flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[#2C2C2E] transition-colors">
+          <div key={t.taskId} className="flex items-start gap-3 px-3 py-2.5 rounded-[12px] hover:bg-[var(--bg-tertiary)] dark:hover:bg-[var(--bg-secondary)] transition-colors">
             <div className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 bg-[var(--success)]" />
             <div className="min-w-0 flex-1">
               <div className="text-[14px] text-[var(--text-secondary)] dark:text-[#98989D] line-through truncate">{t.title}</div>
