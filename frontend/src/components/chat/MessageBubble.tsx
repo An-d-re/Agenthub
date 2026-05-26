@@ -77,7 +77,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     return (
       <motion.div {...bubbleSpring} transition={{ ...bubbleSpring.transition, delay: index * 0.03 }}
         className="flex justify-center w-full my-2">
-        <div className="max-w-[70%] text-center text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)] px-5 py-2 rounded-2xl">
+        <div className="max-w-[70%] text-center text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)] px-5 py-2 rounded-2xl">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
         </div>
       </motion.div>
@@ -118,7 +118,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
       <div className={cn("max-w-[75%] flex flex-col relative", isUser ? "items-end" : "items-start")}>
         {!isUser && (
           <div className="flex items-center gap-1.5 mb-1 ml-1">
-            <span className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[#98989D]">{getAgentName(message.agentId)}</span>
+            <span className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{getAgentName(message.agentId)}</span>
             {message.agentRole && ROLE_CONFIG[message.agentRole] && (
               <span className={cn(
                 "text-[10px] font-semibold px-1.5 py-0.5 rounded-md leading-none",

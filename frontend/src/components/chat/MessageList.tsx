@@ -86,6 +86,10 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   const showPlanCard = plan && plan.approaches.length > 0 && !plan.selectedApproach;
   const showDagEditor = confirmedPlan && confirmedPlan.tasks.length > 0;
 
+  // 最后一条是用户消息 → 显示等待 Agent 回复的思考动画
+  const lastMsg = messages[messages.length - 1];
+  const isThinking = lastMsg?.role === "user" && !showPlanCard && !showDagEditor;
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-1">
       {/* Error state */}
@@ -143,6 +147,22 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
         ) : (
           <DiffCard key={a.artifactId} artifact={a} />
         )
+      )}
+
+      {/* Thinking indicator */}
+      {isThinking && (
+        <div className="flex px-6 gap-3 mb-1.5">
+          <div className="w-8 h-8 rounded-full bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] flex items-center justify-center shrink-0 mt-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M8 16c0-2 4-4 8-4s4 2 4 4"/></svg>
+          </div>
+          <div className="bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] rounded-2xl rounded-bl-[4px] px-4 py-3">
+            <div className="flex gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[var(--text-tertiary)] animate-pulse" style={{ animationDelay: "0ms" }} />
+              <span className="w-2 h-2 rounded-full bg-[var(--text-tertiary)] animate-pulse" style={{ animationDelay: "200ms" }} />
+              <span className="w-2 h-2 rounded-full bg-[var(--text-tertiary)] animate-pulse" style={{ animationDelay: "400ms" }} />
+            </div>
+          </div>
+        </div>
       )}
 
       <div ref={bottomRef} />

@@ -23,7 +23,7 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
   return (
     <div className="flex justify-center w-full my-3 animate-spring">
       <div className="w-full max-w-xl space-y-3">
-        <div className="text-[11px] text-muted-foreground/60 dark:text-[#98989D]/60 text-center uppercase tracking-widest font-medium">
+        <div className="text-[11px] text-muted-foreground/60 dark:text-[var(--text-secondary)]/60 text-center uppercase tracking-widest font-medium">
           方案对比
         </div>
 

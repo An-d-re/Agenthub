@@ -113,7 +113,7 @@ export function ChatPanel() {
             </h2>
           )}
           {activeSession && (
-            <p className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] mt-0.5">
+            <p className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mt-0.5">
               {activeSession.type === "group" ? `群聊 · ${sessionAgents.length} 人` : "单聊"}
             </p>
           )}
@@ -182,7 +182,7 @@ export function ChatPanel() {
               })}
             </div>
             <div className="border-t border-[var(--border)] dark:border-[#38383A] pt-4">
-              <p className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D] mb-2">添加 Agent</p>
+              <p className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-2">添加 Agent</p>
               <div className="space-y-1">
                 {agents.filter(a => !sessionAgents.includes(a.id)).map(a => (
                   <button key={a.id} onClick={()=>handleAddMember(a.id)}

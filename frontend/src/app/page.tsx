@@ -15,8 +15,8 @@ function RightPanel() {
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1E]">
       <div className="flex px-4 pt-4 pb-0 gap-1">
-        <button onClick={()=>setTab("tasks")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="tasks"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[#98989D] dark:hover:text-[var(--bg-secondary)]"}`}>任务</button>
-        <button onClick={()=>setTab("traces")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="traces"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[#98989D] dark:hover:text-[var(--bg-secondary)]"}`}>追踪</button>
+        <button onClick={()=>setTab("tasks")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="tasks"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[var(--text-secondary)] dark:hover:text-[var(--bg-secondary)]"}`}>任务</button>
+        <button onClick={()=>setTab("traces")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="traces"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[var(--text-secondary)] dark:hover:text-[var(--bg-secondary)]"}`}>追踪</button>
       </div>
       <div className="flex-1 overflow-hidden mt-3">
         {tab === "tasks" ? <TaskPipeline /> : <TracePanel />}

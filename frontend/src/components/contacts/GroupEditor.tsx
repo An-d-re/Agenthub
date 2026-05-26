@@ -73,7 +73,7 @@ export function GroupEditor({ open, onClose }: Props) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           <div>
-            <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[#98989D] uppercase tracking-wider">群名称</label>
+            <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[var(--text-secondary)] uppercase tracking-wider">群名称</label>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
@@ -84,7 +84,7 @@ export function GroupEditor({ open, onClose }: Props) {
           </div>
 
           <div>
-            <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[#98989D] uppercase tracking-wider">
+            <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[var(--text-secondary)] uppercase tracking-wider">
               成员 · {selected.size}/{agents.length}
             </label>
             <div className="mt-2 space-y-1">

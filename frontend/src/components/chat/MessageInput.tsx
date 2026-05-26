@@ -136,7 +136,7 @@ export function MessageInput({ onSend, disabled }: Props) {
           accept="image/*,.txt,.md,.py,.js,.ts,.tsx,.jsx,.json,.yml,.yaml,.html,.css,.sql,.sh,.pdf"
         />
         <button
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--accent)] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5"
           disabled={disabled || uploading || !activeSessionId}
           onClick={() => fileInputRef.current?.click()}
           title="上传文件"
@@ -199,14 +199,14 @@ export function MessageInput({ onSend, disabled }: Props) {
               </div>
               <div>
                 <div className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">{agent.name}</div>
-                <div className="text-[11px] text-[var(--text-secondary)] dark:text-[#98989D]">{agent.adapterType}</div>
+                <div className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{agent.adapterType}</div>
               </div>
             </button>
           ))}
         </div>
       )}
 
-      <div className="text-[11px] text-[var(--text-tertiary)] dark:text-[#636366] text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · @ 选择 Agent</div>
+      <div className="text-[11px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] text-center mt-1.5">Enter 发送 · Shift+Enter 换行 · @ 选择 Agent</div>
     </div>
   );
 }

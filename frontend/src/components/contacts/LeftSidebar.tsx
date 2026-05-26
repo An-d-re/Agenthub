@@ -33,7 +33,6 @@ export function LeftSidebar() {
   const selectedContactId = useChatStore(s => s.selectedContactId);
   const setSelectedContact = useChatStore(s => s.setSelectedContact);
   const [search, setSearch] = useState("");
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<{id:string;name:string;systemPrompt:string;skills:string[];capabilityTags:string[];avatarUrl:string}|null>(null);
   const [contextMenu, setContextMenu] = useState<{x:number;y:number;agentId:string}|null>(null);
@@ -41,6 +40,7 @@ export function LeftSidebar() {
   const [tab, setTab] = useState<TabKey>("agents");
   const [groupEditorOpen, setGroupEditorOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [sessionDeleteConfirm, setSessionDeleteConfirm] = useState<{id:string;title:string;isGroup:boolean}|null>(null);
 
   // Tab indicator positions
   const tabRefs: Record<TabKey, number> = { agents: 12, groups: 104, topics: 196 };
@@ -89,9 +89,15 @@ export function LeftSidebar() {
     if (r.ok) { const s = await r.json(); useChatStore.getState().setSessions([s, ...sessions]); setActiveSession(s.id); }
   };
 
-  const handleDeleteSession = async (e: React.MouseEvent, sid: string) => {
+  const handleDeleteSession = (e: React.MouseEvent, s: typeof sessions[0]) => {
     e.stopPropagation();
-    if (deleting) return; setDeleting(sid);
+    setSessionDeleteConfirm({ id: s.id, title: s.title || (s.type === "group" ? "群聊" : "对话"), isGroup: s.type === "group" });
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!sessionDeleteConfirm) return;
+    const sid = sessionDeleteConfirm.id;
+    setSessionDeleteConfirm(null);
     try {
       const r = await fetch(`${API_BASE}/api/sessions/${sid}`, {method:"DELETE"});
       if (r.ok) {
@@ -99,7 +105,7 @@ export function LeftSidebar() {
         if (activeSessionId === sid) { const rem = allSessions.filter(s2 => s2.id !== sid); if (rem.length > 0) setActiveSession(rem[0].id); }
         const sr = await fetch(`${API_BASE}/api/sessions`); if (sr.ok) useChatStore.getState().setSessions(await sr.json());
       }
-    } catch {} finally { setDeleting(null); }
+    } catch {}
   };
 
   const handleContextMenu = (e: React.MouseEvent, agentId: string) => {
@@ -178,7 +184,7 @@ export function LeftSidebar() {
               onClick={() => setTab(t.key)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors duration-200",
-                tab === t.key ? "text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
+                tab === t.key ? "text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
               )}
             >
               {tabIcon(t.key)}
@@ -230,7 +236,7 @@ export function LeftSidebar() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{agent.name}</div>
-                        <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[var(--text-secondary)] dark:text-[#98989D] bg-[var(--border)] dark:bg-[#3A3A3C] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
+                        <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] bg-[var(--border)] dark:bg-[#3A3A3C] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
                       </div>
                     </div>
                   );
@@ -243,7 +249,7 @@ export function LeftSidebar() {
           {tab === "groups" && (
             <motion.div key="groups" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
               {groupSessions.filter(s => searchFilter(s.title||"")).length === 0 ? (
-                <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[#636366] py-12">
+                <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                   <div className="text-4xl mb-3">👥</div>
                   {search ? "无匹配群聊" : "暂无群聊"}
                   <div className="text-[11px] mt-1">{search ? "" : "点击下方按钮创建一个"}</div>
@@ -260,9 +266,9 @@ export function LeftSidebar() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{s.title||"群聊"}</div>
-                        <div className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D]">{s.agentCount>0 ? `群聊 · ${s.agentCount}人` : "群聊"}</div>
+                        <div className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{s.agentCount>0 ? `群聊 · ${s.agentCount}人` : "群聊"}</div>
                       </div>
-                      <button onClick={e=>handleDeleteSession(e,s.id)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
+                      <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
                     </div>
@@ -276,7 +282,7 @@ export function LeftSidebar() {
           {tab === "topics" && (
             <motion.div key="topics" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
               {!selectedContactId ? (
-                <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[#636366] py-12">
+                <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                   <div className="text-4xl mb-3">💬</div>
                   请先选择一个助手
                   <div className="text-[11px] mt-1 mb-4">话题需要与助手关联</div>
@@ -286,13 +292,13 @@ export function LeftSidebar() {
                 <>
                   {/* Current agent bar */}
                   <div className="flex items-center gap-2 mb-2 px-2 py-1">
-                    <span className="text-[11px] text-[var(--text-secondary)] dark:text-[#98989D]">助手：</span>
+                    <span className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">助手：</span>
                     <span className="text-[12px] font-medium truncate dark:text-[var(--bg-secondary)]">{selectedAgent?.name || selectedContactId.slice(0,8)}</span>
                     <button onClick={() => setSelectedContact(null)} className="ml-auto text-[11px] text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors">✕</button>
                   </div>
 
                   {agentTopics.filter(s => searchFilter(s.title||"")).length === 0 ? (
-                    <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[#636366] py-12">
+                    <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                       <div className="text-4xl mb-3">💬</div>
                       暂无话题
                       <div className="text-[11px] mt-1">点击下方按钮创建</div>
@@ -309,9 +315,9 @@ export function LeftSidebar() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{s.title||"新对话"}</div>
-                            <div className="text-[12px] text-[var(--text-secondary)] dark:text-[#98989D]">单聊</div>
+                            <div className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">单聊</div>
                           </div>
-                          <button onClick={e=>handleDeleteSession(e,s.id)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
+                          <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                           </button>
                         </div>
@@ -333,7 +339,7 @@ export function LeftSidebar() {
           className={cn(
             "w-full py-2.5 rounded-[12px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
             bottomBtn.disabled
-              ? "bg-[#C7C7CC] dark:bg-[#3A3A3C] text-white dark:text-[#636366] cursor-not-allowed"
+              ? "bg-[#C7C7CC] dark:bg-[#3A3A3C] text-white dark:text-[var(--text-tertiary)] cursor-not-allowed"
               : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
           )}
         >
@@ -347,12 +353,28 @@ export function LeftSidebar() {
       {/* Group Editor */}
       <GroupEditor open={groupEditorOpen} onClose={() => setGroupEditorOpen(false)} />
 
+      {/* Session Delete Confirmation */}
+      {sessionDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={() => setSessionDeleteConfirm(null)}>
+          <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
+            <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] mb-2">删除{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}</h3>
+            <p className="text-[14px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-1">
+              确定要删除「{sessionDeleteConfirm.title}」吗？此操作不可撤销，该{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}中的所有消息将被永久删除。
+            </p>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setSessionDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] dark:border-[var(--border)] text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-tertiary)] transition-colors">取消</button>
+              <button onClick={confirmDeleteSession} className="flex-1 py-2.5 rounded-xl bg-[var(--danger)] text-white text-[14px] font-medium hover:bg-[#E0352A] transition-colors">确认删除</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Agent Delete Confirmation */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
             <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] mb-2">删除助手</h3>
-            <p className="text-[14px] text-[var(--text-secondary)] dark:text-[#98989D] mb-1">
+            <p className="text-[14px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-1">
               删除该助手将<strong className="text-[var(--danger)]">同时删除其所有话题</strong>，是否继续？
             </p>
             <div className="flex gap-2 mt-5">

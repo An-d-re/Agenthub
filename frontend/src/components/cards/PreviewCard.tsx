@@ -165,7 +165,7 @@ export function PreviewCard({ artifact }: Props) {
                 onClick={() => setDevice(p.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-[12px] text-[12px] font-medium transition-all",
-                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[#98989D] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
+                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
                 )}
               >
                 {p.label}
