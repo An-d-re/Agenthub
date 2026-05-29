@@ -40,6 +40,9 @@ backend/test_session_id.txt
 # Staff notes (keep req.md in git)
 改进.md
 
+# AI collaboration records (local only, for competition submission)
+ai-collaboration/
+
 # Python
 *.egg-info/
 .eggs/
