@@ -89,6 +89,7 @@ class BasePhaseHandler:
             "api_key": None,
             "model": None,
             "system_prompt": agent.system_prompt or None,
+            "deep_thinking": True,  # 启用 DeepSeek 深度思考模式
         })
         return agent, adapter
 
@@ -225,6 +226,7 @@ class BasePhaseHandler:
     async def _send_system_message(
         self, db: AsyncSession, session_id: str, content: str,
         agent_id: str = "", agent_role: str = "", pending_events: Optional[list[dict]] = None,
+        publish_now: bool = False,
     ) -> Message:
         msg = Message(
             session_id=session_id,
@@ -252,7 +254,132 @@ class BasePhaseHandler:
                 "session_id": session_id,
                 "payload": payload,
             })
+        # 立即发布到前端（绕过 pending_events 的 commit 延迟），用于进度提示
+        if publish_now:
+            from app.core.event_bus import event_bus
+            try:
+                await event_bus.publish(session_id, {
+                    "type": "chat.message",
+                    "session_id": session_id,
+                    "payload": payload,
+                })
+            except Exception:
+                pass  # 立即发布失败不影响主流程
         return msg
+
+    # ── 流式 Agent 调用 + 停止检查 ──────────────────────────
+
+    @staticmethod
+    def _get_stop_event(session_id: str) -> Optional[asyncio.Event]:
+        """获取 session 的停止信号，供流式调用中检查。"""
+        from app.core.orchestrator import Orchestrator
+        return Orchestrator._stop_events.get(session_id)
+
+    async def _stream_agent_response(
+        self, db: AsyncSession, session_id: str,
+        adapter, agent, context: "AgentContext", message: str,
+        pending_events: list[dict], agent_role: str,
+    ) -> str:
+        """流式调用 Agent，每 token 检查停止信号，直接发布到 EventBus。
+
+        不发送占位消息——前端 appendStreamToken 在首次收到 token 时自动创建消息。
+        Returns 完整响应文本。若被停止则追加 "已停止生成" 标记。
+        """
+        from app.core.event_bus import event_bus
+
+        # 先在 DB 中创建占位消息（用于持久化），但不发往前端
+        msg = Message(
+            session_id=session_id, agent_id=agent.id,
+            role="agent", content="", message_type="system",
+        )
+        db.add(msg)
+        await db.flush()
+        msg_id = msg.id
+
+        # 深度思考内容用单独的 ID
+        reasoning_id = f"reasoning-{msg_id}"
+
+        full = ""
+        reasoning = ""
+        cancelled = False
+        stop_event = self._get_stop_event(session_id)
+        seq = 0
+        reason_seq = 0
+        try:
+            async for token in adapter.stream_message(context, message):
+                if stop_event and stop_event.is_set():
+                    cancelled = True
+                    break
+
+                # 处理 StreamToken（新版）或纯字符串（向后兼容）
+                if isinstance(token, str):
+                    full += token
+                    seq += 1
+                    await event_bus.publish(session_id, {
+                        "type": "chat.stream.token",
+                        "session_id": session_id,
+                        "payload": {"message_id": msg_id, "token": token, "sequence": seq},
+                    })
+                elif token.type == "reasoning":
+                    reasoning += token.text
+                    reason_seq += 1
+                    await event_bus.publish(session_id, {
+                        "type": "chat.stream.reasoning",
+                        "session_id": session_id,
+                        "payload": {"message_id": msg_id, "reasoning_id": reasoning_id, "token": token.text, "sequence": reason_seq},
+                    })
+                elif token.type == "content":
+                    full += token.text
+                    seq += 1
+                    await event_bus.publish(session_id, {
+                        "type": "chat.stream.token",
+                        "session_id": session_id,
+                        "payload": {"message_id": msg_id, "token": token.text, "sequence": seq},
+                    })
+        except Exception as e:
+            logger.exception("Agent 流式调用失败: %s", e)
+            full = f"[Error: {e}]"
+            await event_bus.publish(session_id, {
+                "type": "chat.stream.token",
+                "session_id": session_id,
+                "payload": {"message_id": msg_id, "token": full, "sequence": seq + 1},
+            })
+
+        if cancelled:
+            full += "\n\n---\n⚠️ **已停止生成。**"
+
+        # 更新 DB 消息内容
+        msg.content = full
+        await db.flush()
+
+        # 发送完整消息到前端（覆盖流式占位），保留 reasoning 内容
+        payload: dict = {
+            "id": msg_id, "agent_id": agent.id, "agent_role": agent_role,
+            "role": "agent", "content": full, "message_type": "system",
+            "created_at": _utcnow().isoformat(),
+        }
+        if reasoning:
+            payload["reasoning"] = reasoning
+            payload["reasoning_id"] = reasoning_id
+        pending_events.append({
+            "type": "chat.message",
+            "session_id": session_id,
+            "payload": payload,
+        })
+
+        # 深度思考完成事件
+        if reasoning:
+            pending_events.append({
+                "type": "chat.reasoning.complete",
+                "session_id": session_id,
+                "payload": {
+                    "message_id": msg_id,
+                    "reasoning_id": reasoning_id,
+                    "content": reasoning,
+                },
+            })
+
+        return full
 
     async def _publish_task_update(
         self, session_id: str, task: Task, status: str, pending_events: list[dict],

@@ -58,7 +58,10 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   }, [activeSessionId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // 流式接收时用 instant（避免抖动），消息稳定后用 smooth
+    const last = messages[messages.length - 1];
+    const isStreaming = last?.role === "agent" && (!last.content || last.reasoning !== undefined);
+    bottomRef.current?.scrollIntoView({ behavior: isStreaming ? "instant" : "smooth" });
   }, [messages, plan, confirmedPlan]);
 
   const handleSelectApproach = (approach: { name: string }) => {

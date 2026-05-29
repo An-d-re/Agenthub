@@ -53,6 +53,7 @@ async def run_agent_reply(session_id: str, user_message: str):
         "api_key": None,  # uses settings env var as fallback
         "model": None,    # uses adapter default
         "system_prompt": agent.system_prompt or None,
+        "deep_thinking": True,
     })
 
     context = AgentContext(
@@ -75,13 +76,28 @@ async def run_agent_reply(session_id: str, user_message: str):
     token_count = 0
     try:
         async for token in adapter.stream_message(context, user_message):
-            full_content += token
-            token_count += 1
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
-            })
+            if isinstance(token, str):
+                full_content += token
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
+                })
+            elif token.type == "reasoning":
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.reasoning",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": 0},
+                })
+            elif token.type == "content":
+                full_content += token.text
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token.text, "sequence": token_count},
+                })
     except Exception as e:
         full_content = f"[Error: {e}]"
 
@@ -146,6 +162,7 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
         "api_key": None,
         "model": None,
         "system_prompt": agent.system_prompt or None,
+        "deep_thinking": True,
     })
 
     context = AgentContext(
@@ -175,13 +192,28 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
     token_count = 0
     try:
         async for token in adapter.stream_message(context, modify_prompt):
-            full_content += token
-            token_count += 1
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
-            })
+            if isinstance(token, str):
+                full_content += token
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
+                })
+            elif token.type == "reasoning":
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.reasoning",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": 0},
+                })
+            elif token.type == "content":
+                full_content += token.text
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token.text, "sequence": token_count},
+                })
     except Exception as e:
         full_content = f"[Error: {e}]"
 

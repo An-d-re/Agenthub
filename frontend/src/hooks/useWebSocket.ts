@@ -4,8 +4,8 @@ import { useEffect, useRef, useCallback } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { WS_BASE, API_BASE } from "@/lib/constants";
 
-const RECONNECT_DELAYS = [1, 2, 4, 8];  // 重连间隔（秒）
-const MAX_RECONNECT_ATTEMPTS = 4;
+const RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30];  // 重连间隔（秒），最多约 2 分钟
+const MAX_RECONNECT_ATTEMPTS = 8;
 
 function getClientId(): string {
   if (typeof window === "undefined") return "";
@@ -111,10 +111,14 @@ export function useWebSocket(sessionId: string | null) {
             fileName: p.file_name,
             fileUrl: p.file_url,
             fileSize: p.file_size,
+            reasoning: p.reasoning,
+            reasoningId: p.reasoning_id,
             createdAt,
           });
         } else if (msg.type === "chat.stream.token") {
           store.appendStreamToken(sessionId, p.message_id, p.token);
+        } else if (msg.type === "chat.stream.reasoning") {
+          store.appendReasoningToken(sessionId, p.message_id, p.reasoning_id || `reasoning-${p.message_id}`, p.token);
         } else if (msg.type === "plan.comparison") {
           store.setPlan(sessionId, {
             messageId: p.message_id || "",

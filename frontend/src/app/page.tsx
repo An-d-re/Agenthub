@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { LeftSidebar } from "@/components/contacts/LeftSidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { TaskPipeline } from "@/components/tasks/TaskPipeline";
@@ -27,6 +28,7 @@ function RightPanel() {
 
 export default function Home() {
   const { dark, toggle } = useTheme();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // First-visit Demo
   useEffect(() => {
@@ -58,10 +60,30 @@ export default function Home() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-white dark:bg-[#1C1C1E]">
-      <div className="w-[240px] shrink-0 border-r border-[var(--border)] dark:border-[#38383A] hidden md:flex flex-col">
+      {/* Sidebar — always on md+, togglable on mobile */}
+      <div className={cn(
+        "w-[240px] shrink-0 border-r border-[var(--border)] dark:border-[#38383A] flex flex-col transition-transform duration-200",
+        "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-2xl",
+        !sidebarOpen && "max-md:-translate-x-full",
+      )}>
         <LeftSidebar />
       </div>
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
       <ChatPanel />
+      {/* Mobile sidebar toggle button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="md:hidden fixed top-3 left-3 z-50 w-9 h-9 rounded-full bg-white dark:bg-[var(--bg-secondary)] border border-[var(--border)] shadow-md flex items-center justify-center text-[var(--text-secondary)]"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+        </svg>
+      </button>
+
       <div className="w-[340px] shrink-0 border-l border-[var(--border)] dark:border-[#38383A] hidden xl:flex flex-col bg-white dark:bg-[#1C1C1E]">
         <RightPanel />
       </div>

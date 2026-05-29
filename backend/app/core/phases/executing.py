@@ -114,21 +114,14 @@ class ExecutingHandler(BasePhaseHandler):
         logger.info("并行执行 %d 个就绪任务", len(ready))
 
         async def run_one(task_id: str) -> None:
-            # 获取 orchestrator 的 semaphore
-            if orch and hasattr(orch, 'middleware'):
-                await orch.middleware.subagent_limiter.acquire(ctx.plan.session_id)
-            try:
-                async with async_session() as task_db:
-                    task = await task_db.get(Task, task_id)
-                    task_plan = await task_db.get(Plan, ctx.plan.id)
-                    if task and task_plan and task.status == "pending":
-                        await self._execute_single_task(
-                            task_db, task_plan, task, ctx.mentions, ctx.plan.session_id, orch,
-                        )
-                    await task_db.commit()
-            finally:
-                if orch and hasattr(orch, 'middleware'):
-                    orch.middleware.subagent_limiter.release(ctx.plan.session_id)
+            async with async_session() as task_db:
+                task = await task_db.get(Task, task_id)
+                task_plan = await task_db.get(Plan, ctx.plan.id)
+                if task and task_plan and task.status == "pending":
+                    await self._execute_single_task(
+                        task_db, task_plan, task, ctx.mentions, ctx.plan.session_id, orch,
+                    )
+                await task_db.commit()
 
         await asyncio.gather(*[run_one(tid) for _, tid in ready])
 
@@ -190,17 +183,33 @@ class ExecutingHandler(BasePhaseHandler):
             config={"system_prompt": CODER_TASK_PROMPT},
         )
 
+        # 停止检查
+        stop_evt = self._get_stop_event(session_id)
+        if stop_evt and stop_evt.is_set():
+            task.status = "cancelled"
+            task.error_message = "用户停止执行"
+            await db.flush()
+            await self._publish_task_update(session_id, task, "cancelled", pending)
+            return
+
         try:
-            async with tracer.span(
-                session_id=session_id,
-                operation_name="adapter.execute_task",
-                service_name=adapter.adapter_type,
-                tags={"task_id": task.id, "task_title": task.title},
-            ) as span:
-                response = await adapter.execute_task(context, {
-                    "id": task.id, "title": task.title, "description": task.description,
-                })
-                span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+            # 信号量只包 API 调用，不包重试
+            if orch and hasattr(orch, 'middleware'):
+                await orch.middleware.subagent_limiter.acquire(session_id)
+            try:
+                async with tracer.span(
+                    session_id=session_id,
+                    operation_name="adapter.execute_task",
+                    service_name=adapter.adapter_type,
+                    tags={"task_id": task.id, "task_title": task.title},
+                ) as span:
+                    response = await adapter.execute_task(context, {
+                        "id": task.id, "title": task.title, "description": task.description,
+                    })
+                    span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+            finally:
+                if orch and hasattr(orch, 'middleware'):
+                    orch.middleware.subagent_limiter.release(session_id)
 
             task.result = response.content
             task.status = "done"
@@ -222,8 +231,9 @@ class ExecutingHandler(BasePhaseHandler):
             )
             if not reviewed:
                 await db.flush()
-                # 重试
-                await self._execute_single_task(db, plan, task, mentions, session_id)
+                # dispute 表示超过最大重试次数，不再递归
+                if task.status != "dispute":
+                    await self._execute_single_task(db, plan, task, mentions, session_id)
                 return
 
             preview = response.content[:300] + ("…" if len(response.content) > 300 else "")

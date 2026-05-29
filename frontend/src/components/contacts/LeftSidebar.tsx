@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,9 +41,27 @@ export function LeftSidebar() {
   const [groupEditorOpen, setGroupEditorOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [sessionDeleteConfirm, setSessionDeleteConfirm] = useState<{id:string;title:string;isGroup:boolean}|null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
-  // Tab indicator positions
-  const tabRefs: Record<TabKey, number> = { agents: 12, groups: 104, topics: 196 };
+  // Tab indicator positions (dynamic via refs)
+  const tabButtonRefs: Record<TabKey, React.RefObject<HTMLButtonElement | null>> = {
+    agents: useRef<HTMLButtonElement>(null),
+    groups: useRef<HTMLButtonElement>(null),
+    topics: useRef<HTMLButtonElement>(null),
+  };
+  const [tabIndicator, setTabIndicator] = useState({ left: 12, width: 80 });
+
+  useEffect(() => {
+    const btn = tabButtonRefs[tab].current;
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      const parent = btn.parentElement;
+      if (parent) {
+        const pr = parent.getBoundingClientRect();
+        setTabIndicator({ left: rect.left - pr.left, width: rect.width });
+      }
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetch(`${API_BASE}/api/agents`).then(r => r.json()).then(data => {
@@ -97,14 +115,28 @@ export function LeftSidebar() {
   const confirmDeleteSession = async () => {
     if (!sessionDeleteConfirm) return;
     const sid = sessionDeleteConfirm.id;
+    const title = sessionDeleteConfirm.title;
     setSessionDeleteConfirm(null);
     try {
       const r = await fetch(`${API_BASE}/api/sessions/${sid}`, {method:"DELETE"});
-      if (r.ok) {
-        if (activeSessionId === sid) setActiveSession("");
-        const sr = await fetch(`${API_BASE}/api/sessions`); if (sr.ok) useChatStore.getState().setSessions(await sr.json());
+      if (!r.ok) {
+        setDeleteError(`删除「${title}」失败，请重试`);
+        setTimeout(() => setDeleteError(""), 3000);
+        return;
       }
-    } catch {}
+      if (activeSessionId === sid) setActiveSession("");
+      const sr = await fetch(`${API_BASE}/api/sessions`);
+      if (sr.ok) {
+        useChatStore.getState().setSessions(await sr.json());
+      } else {
+        // 删除成功但刷新列表失败，做乐观移除
+        const store = useChatStore.getState();
+        store.setSessions(store.sessions.filter(s => s.id !== sid));
+      }
+    } catch {
+      setDeleteError(`网络错误，删除「${title}」失败`);
+      setTimeout(() => setDeleteError(""), 3000);
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, agentId: string) => {
@@ -180,6 +212,7 @@ export function LeftSidebar() {
           {TABS.map(t => (
             <button
               key={t.key}
+              ref={tabButtonRefs[t.key]}
               onClick={() => setTab(t.key)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors duration-200",
@@ -190,10 +223,10 @@ export function LeftSidebar() {
               <span>{t.label}</span>
             </button>
           ))}
-          {/* Sliding indicator */}
+          {/* Sliding indicator — dynamic position */}
           <motion.div
             className="absolute bottom-0 h-[3px] bg-[var(--accent)] rounded-full"
-            animate={{ left: tabRefs[tab], width: 80 }}
+            animate={{ left: tabIndicator.left, width: tabIndicator.width }}
             transition={{ type: "spring", stiffness: 500, damping: 35 }}
           />
         </div>
@@ -360,6 +393,7 @@ export function LeftSidebar() {
             <p className="text-[14px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-1">
               确定要删除「{sessionDeleteConfirm.title}」吗？此操作不可撤销，该{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}中的所有消息将被永久删除。
             </p>
+            {deleteError && <p className="text-[13px] text-[var(--danger)] mb-2">{deleteError}</p>}
             <div className="flex gap-2 mt-5">
               <button onClick={() => setSessionDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] dark:border-[var(--border)] text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-tertiary)] transition-colors">取消</button>
               <button onClick={confirmDeleteSession} className="flex-1 py-2.5 rounded-xl bg-[var(--danger)] text-white text-[14px] font-medium hover:bg-[#E0352A] transition-colors">确认删除</button>

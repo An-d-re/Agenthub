@@ -85,7 +85,7 @@ export function TaskPipeline() {
         {/* Segmented progress bar */}
         <div className="flex gap-1 h-1.5">
           {tasks.map((t) => {
-            const c = STATUS[t.status] || STATUS.pending;
+            const c = STATUS[t.status] || (console.warn("TaskPipeline: 未知状态", t.status), STATUS.pending);
             return (
               <div
                 key={t.taskId}

@@ -35,8 +35,14 @@ export function ChatPanel() {
   const [title, setTitle] = useState("");
   const [connBanner, setConnBanner] = useState<"reconnecting"|"restored"|null>(null);
 
+  const [sendError, setSendError] = useState(false);
+
   const handleSend = (content: string, quoteMessageId?: string) => {
-    sendMessage(content, quoteMessageId);
+    const ok = sendMessage(content, quoteMessageId);
+    if (!ok) {
+      setSendError(true);
+      setTimeout(() => setSendError(false), 4000);
+    }
   };
 
   const handleRegenerate = (agentMessageId: string) => {
@@ -67,6 +73,17 @@ export function ChatPanel() {
   const messages = useChatStore(s => activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY);
   const lastMsg = messages[messages.length - 1];
   const isThinking = lastMsg?.role === "user";
+  const [thinkingTimedOut, setThinkingTimedOut] = useState(false);
+
+  // isThinking 超时防护：超过 60s 无回复自动重置
+  useEffect(() => {
+    if (!isThinking) { setThinkingTimedOut(false); return; }
+    const t = setTimeout(() => setThinkingTimedOut(true), 60000);
+    return () => clearTimeout(t);
+  }, [isThinking, messages.length]);
+
+  // isThinking 超时时视为未在思考
+  const effectiveThinking = isThinking && !thinkingTimedOut;
 
   const [sessionAgents, setSessionAgents] = useState<string[]>([]);
   useEffect(() => {
@@ -166,7 +183,10 @@ export function ChatPanel() {
       )}
 
       <MessageList onModify={sendModify} onPlanAction={sendPlanAction} onRegenerate={handleRegenerate} />
-      <MessageInput onSend={handleSend} disabled={!isConnected} isThinking={isThinking} onStop={() => sendSessionControl("stop")} />
+      {sendError && (
+        <div className="text-center text-[13px] text-[var(--danger)] py-1">发送失败，正在重连…</div>
+      )}
+      <MessageInput onSend={handleSend} disabled={false} isThinking={effectiveThinking} onStop={() => sendSessionControl("stop")} />
 
       {showMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>

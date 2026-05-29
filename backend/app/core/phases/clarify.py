@@ -1,10 +1,8 @@
 """阶段：clarify（需求澄清）—— Critic 角色质疑需求，最多 2 轮。"""
 
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.phases.base import BasePhaseHandler, PhaseContext, _utcnow
+from app.core.phases.base import BasePhaseHandler, PhaseContext
 from app.core.prompts import CRITIC_SYSTEM_PROMPT
-from app.models.message import Message
 from app.services.adapters.base import AgentContext, AgentRole
 
 logger = logging.getLogger(__name__)
@@ -16,6 +14,14 @@ class ClarifyHandler(BasePhaseHandler):
     MAX_CLARIFY_ROUNDS = 2
 
     async def execute(self, ctx: PhaseContext) -> str | None:
+        # 停止检查
+        if self._get_stop_event(ctx.plan.session_id) and self._get_stop_event(ctx.plan.session_id).is_set():
+            await self._send_system_message(
+                ctx.db, ctx.plan.session_id, "⏹️ 已停止生成。",
+                pending_events=ctx.pending_events,
+            )
+            return None
+
         task_dag = ctx.plan.task_dag or {}
         clarify_round = task_dag.get("clarify_round", 0)
 
@@ -37,6 +43,13 @@ class ClarifyHandler(BasePhaseHandler):
             )
             return None
 
+        # 阶段进度提示
+        await self._send_system_message(
+            ctx.db, ctx.plan.session_id,
+            f"🔍 **{agent.name}** 正在分析需求…",
+            pending_events=ctx.pending_events, publish_now=True,
+        )
+
         history = await self._get_conversation_history(ctx.db, ctx.plan.session_id)
         context = AgentContext(
             session_id=ctx.plan.session_id,
@@ -45,28 +58,11 @@ class ClarifyHandler(BasePhaseHandler):
             config={"system_prompt": CRITIC_SYSTEM_PROMPT},
         )
 
-        response = await adapter.send_message(context, ctx.user_message)
-        content = response.content
-
-        msg = Message(
-            session_id=ctx.plan.session_id,
-            agent_id=agent.id,
-            role="agent",
-            content=content,
-            message_type="system",
+        # 流式调用 + 停止检查
+        content = await self._stream_agent_response(
+            ctx.db, ctx.plan.session_id, adapter, agent, context,
+            ctx.user_message, ctx.pending_events, "critic",
         )
-        ctx.db.add(msg)
-        await ctx.db.flush()
-
-        ctx.pending_events.append({
-            "type": "chat.message",
-            "session_id": ctx.plan.session_id,
-            "payload": {
-                "id": msg.id, "agent_id": agent.id, "agent_role": "critic",
-                "role": "agent", "content": content, "message_type": "system",
-                "created_at": _utcnow().isoformat(),
-            },
-        })
 
         clarify_round += 1
         ctx.plan.task_dag = task_dag | {"clarify_round": clarify_round}

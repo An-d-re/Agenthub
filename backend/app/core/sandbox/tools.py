@@ -54,9 +54,22 @@ def register_tool(
         "required": ["path", "content"],
     },
 )
+def _safe_path(workspace_dir: str, path: str) -> str:
+    """解析路径并确保不会逃逸出 workspace_dir。"""
+    import os
+    workspace = os.path.realpath(workspace_dir)
+    full = os.path.realpath(os.path.join(workspace, path))
+    if not full.startswith(workspace + os.sep) and full != workspace:
+        raise ValueError(f"路径逃逸: {path}")
+    return full
+
+
 async def write_file(path: str, content: str, workspace_dir: str) -> dict:
     import os
-    full_path = os.path.join(workspace_dir, path)
+    try:
+        full_path = _safe_path(workspace_dir, path)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     os.makedirs(os.path.dirname(full_path), exist_ok=True)
     with open(full_path, "w", encoding="utf-8") as f:
         f.write(content)
@@ -77,7 +90,10 @@ async def write_file(path: str, content: str, workspace_dir: str) -> dict:
 )
 async def read_file(path: str, workspace_dir: str) -> dict:
     import os
-    full_path = os.path.join(workspace_dir, path)
+    try:
+        full_path = _safe_path(workspace_dir, path)
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     if not os.path.exists(full_path):
         return {"ok": False, "error": f"文件不存在: {path}"}
     with open(full_path, "r", encoding="utf-8") as f:
@@ -174,7 +190,10 @@ async def install_deps(language: str, workspace_dir: str) -> dict:
 )
 async def list_files(path: str = "", workspace_dir: str = "") -> dict:
     import os
-    target = os.path.join(workspace_dir, path) if path else workspace_dir
+    try:
+        target = _safe_path(workspace_dir, path) if path else workspace_dir
+    except ValueError as e:
+        return {"ok": False, "error": str(e)}
     if not os.path.exists(target):
         return {"ok": False, "error": f"目录不存在: {path}"}
     files = []
