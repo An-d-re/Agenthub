@@ -138,7 +138,7 @@ class BasePhaseHandler:
             if m_role == role:
                 for aid in agent_ids:
                     agent = await db.get(Agent, aid)
-                    if agent and (agent.name == m_name or agent.name.lower() in m_name.lower()):
+                    if agent and agent.name.lower() == m_name.lower():
                         return await self._get_agent_adapter(db, aid)
                 break
 
@@ -380,7 +380,7 @@ class BasePhaseHandler:
                 select(Artifact).where(
                     Artifact.session_id == session_id,
                     Artifact.file_path == file_path,
-                    Artifact.id != task.id,
+                    Artifact.task_id != task.id,
                 ).order_by(Artifact.created_at.desc()).limit(1)
             )
             prev_artifact = prev_result.scalar_one_or_none()
@@ -488,7 +488,7 @@ class BasePhaseHandler:
             review_data = self._extract_json(review_resp.content)
 
             if review_data and not review_data.get("passed", True):
-                if task.retry_count >= self.MAX_TASK_RETRIES + 1:
+                if task.retry_count >= self.MAX_TASK_RETRIES:
                     task.status = "dispute"
                     task.error_message = review_data.get("feedback", "Reviewer 连续不通过")
                     await db.flush()

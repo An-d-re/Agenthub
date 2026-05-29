@@ -13,7 +13,6 @@ interface Props {
 
 export function GroupEditor({ open, onClose }: Props) {
   const agents = useAgentStore(s => s.agents);
-  const sessions = useChatStore(s => s.sessions);
   const setActiveSession = useChatStore(s => s.setActiveSession);
   const [name, setName] = useState("群聊");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -24,7 +23,7 @@ export function GroupEditor({ open, onClose }: Props) {
       setSelected(new Set(agents.slice(0, 3).map(a => a.id)));
       setSaving(false);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, agents]);
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -45,7 +44,7 @@ export function GroupEditor({ open, onClose }: Props) {
       });
       if (r.ok) {
         const s = await r.json();
-        useChatStore.getState().setSessions([s, ...sessions]);
+        useChatStore.getState().setSessions([s, ...useChatStore.getState().sessions]);
         setActiveSession(s.id);
         onClose();
       }
@@ -58,13 +57,13 @@ export function GroupEditor({ open, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20" />
       <div
-        className="relative w-[360px] h-full bg-[var(--bg-primary)] dark:bg-[#1C1C1E] shadow-lg animate-spring flex flex-col"
+        className="relative w-[360px] h-full bg-[var(--bg-primary)] shadow-lg animate-spring flex flex-col"
         style={{ animation: "spring-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] dark:border-[#38383A]">
-          <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">新建群聊</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+          <h2 className="text-[17px] font-semibold">新建群聊</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
@@ -77,7 +76,7 @@ export function GroupEditor({ open, onClose }: Props) {
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="mt-2 w-full bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] dark:ring-[#38383A] focus:ring-[var(--accent)] transition-all"
+              className="mt-2 w-full bg-[var(--bg-secondary)] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] focus:ring-[var(--accent)] transition-all"
               placeholder="输入群聊名称"
               maxLength={30}
             />
@@ -121,7 +120,7 @@ export function GroupEditor({ open, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[var(--border)] dark:border-[#38383A]">
+        <div className="p-4 border-t border-[var(--border)]">
           <button
             onClick={save}
             disabled={saving || selected.size < 2 || !name.trim()}

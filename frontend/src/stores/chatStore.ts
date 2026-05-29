@@ -113,7 +113,7 @@ interface ChatState {
   selectedContactId: string | null;
   setSessions: (sessions: SessionItem[]) => void;
   setSelectedContact: (id: string | null) => void;
-  setActiveSession: (id: string) => void;
+  setActiveSession: (id: string | null) => void;
   addMessage: (sessionId: string, msg: ChatMessage) => void;
   appendStreamToken: (sessionId: string, msgId: string, token: string) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
@@ -130,6 +130,8 @@ interface ChatState {
   setPendingSend: (msg: string | null) => void;
   replyTarget: ReplyTarget | null;
   setReplyTarget: (target: ReplyTarget | null) => void;
+  traceSpans: Record<string, TraceSpan[]>;
+  addTraceSpan: (sessionId: string, span: TraceSpan) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -144,6 +146,7 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedContactId: null,
   pendingSend: null,
   replyTarget: null,
+  traceSpans: {},
 
   setSessions: (sessions) => set({ sessions }),
   setSelectedContact: (id) => set({ selectedContactId: id }),
@@ -269,4 +272,16 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setPendingSend: (msg) => set({ pendingSend: msg }),
   setReplyTarget: (target) => set({ replyTarget: target }),
+  addTraceSpan: (sessionId, span) =>
+    set((state) => ({
+      traceSpans: {
+        ...state.traceSpans,
+        [sessionId]: [...(state.traceSpans[sessionId] || []), span],
+      },
+    })),
 }));
+
+// Expose store for E2E testing
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__CHAT_STORE__ = useChatStore;
+}

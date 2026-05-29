@@ -83,7 +83,7 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
                 className={cn(
                   "group cursor-pointer transition-colors",
                   isSelected(i)
-                    ? "bg-[#007AFF]/20 border-l-2 border-l-[#007AFF]"
+                    ? "bg-[var(--accent)]/20 border-l-2 border-l-[var(--accent)]"
                     : "hover:bg-[#2D2D2F]/50 border-l-2 border-l-transparent"
                 )}
               >

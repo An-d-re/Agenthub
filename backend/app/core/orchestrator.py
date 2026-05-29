@@ -142,8 +142,7 @@ class Orchestrator:
                                         mentions=mentions, pending_events=exec_pending,
                                         orchestrator=self,
                                     )
-                                    from app.core.phases.executing import ExecutingHandler
-                                    exec_handler = ExecutingHandler()
+                                    exec_handler = PHASE_REGISTRY["executing"]
                                     await exec_handler.execute_tasks(exec_ctx)
                                     self._pending_events.extend(exec_pending)
 
@@ -219,6 +218,14 @@ class Orchestrator:
                 self._pending_events.extend(pending)
                 if next_phase:
                     plan.phase = next_phase
+                    if next_phase == "executing":
+                        exec_pending: list[dict] = []
+                        exec_ctx = PhaseContext(
+                            db=db, plan=plan, user_message="",
+                            mentions=[], pending_events=exec_pending, orchestrator=self,
+                        )
+                        await PHASE_REGISTRY["executing"].execute_tasks(exec_ctx)
+                        self._pending_events.extend(exec_pending)
                 await db.commit()
             await self._flush_pending_events()
 
@@ -243,8 +250,7 @@ class Orchestrator:
                         db=db, plan=plan, user_message="",
                         mentions=[], pending_events=exec_pending, orchestrator=self,
                     )
-                    from app.core.phases.executing import ExecutingHandler
-                    await ExecutingHandler().execute_tasks(exec_ctx)
+                    await PHASE_REGISTRY["executing"].execute_tasks(exec_ctx)
                     self._pending_events.extend(exec_pending)
                 await db.commit()
             await self._flush_pending_events()

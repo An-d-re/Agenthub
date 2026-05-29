@@ -13,9 +13,10 @@ interface Props {
   onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
   onPlanAction?: (action: string, taskId?: string, approachName?: string) => boolean;
   onRegenerate?: (messageId: string) => void;
+  searchTerm?: string;
 }
 
-export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
+export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }: Props) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const messages = useChatStore((s) =>
     activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
@@ -34,6 +35,16 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   const [msgLoading, setMsgLoading] = useState(false);
   const [msgError, setMsgError] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+
+  // 追踪用户是否手动上滚
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 150; // 距底部 150px 内视为"在底部"
+    userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > threshold;
+  };
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -58,6 +69,8 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   }, [activeSessionId]);
 
   useEffect(() => {
+    // 用户已上滚查看历史时不强制滚到底部
+    if (userScrolledUpRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, plan, confirmedPlan]);
 
@@ -91,7 +104,7 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   const isThinking = lastMsg?.role === "user" && !showPlanCard && !showDagEditor;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-1">
+    <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-1">
       {/* Error state */}
       {msgError && !msgLoading && (
         <div className="text-center mt-12">
@@ -122,9 +135,15 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
           发送消息开始对话
         </div>
       )}
-      {messages.map((msg, i) => (
+      {(searchTerm
+        ? messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase()))
+        : messages
+      ).map((msg, i) => (
         <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} onModify={onModify} onRegenerate={onRegenerate} />
       ))}
+      {searchTerm && messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && messages.length > 0 && (
+        <div className="text-center text-[var(--text-secondary)] mt-6 text-[13px]">无匹配消息</div>
+      )}
 
       {showPlanCard && (
         <PlanCard

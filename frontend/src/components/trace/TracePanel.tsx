@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useChatStore, type TraceSpan } from "@/stores/chatStore";
-import { API_BASE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
 const COLORS: Record<string, string> = {
@@ -14,22 +13,9 @@ function ms(n: number) { return n < 1000 ? `${n.toFixed(0)}ms` : `${(n / 1000).t
 
 export function TracePanel() {
   const sid = useChatStore(s => s.activeSessionId);
-  const [spans, setSpans] = useState<TraceSpan[]>([]);
+  const spans = useChatStore(s => sid ? (s.traceSpans[sid] || []) : []);
   const [selectedTrace, setSelectedTrace] = useState<string | null>(null);
   const [serviceFilter, setServiceFilter] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!sid) { setSpans([]); return; }
-    let c = false;
-    const f = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/api/traces?session_id=${sid}&limit=100`);
-        if (r.ok && !c) setSpans(await r.json());
-      } catch {}
-    };
-    f(); const i = setInterval(f, 5000);
-    return () => { c = true; clearInterval(i); };
-  }, [sid]);
 
   const { sortedTraces, services } = useMemo(() => {
     const t = new Map<string, TraceSpan[]>();
@@ -64,13 +50,13 @@ export function TracePanel() {
         <div className="flex gap-1 mt-2 flex-wrap">
           <button onClick={() => setServiceFilter(null)}
             className={cn("text-[10px] px-2 py-0.5 rounded-md transition-colors",
-              !serviceFilter ? "bg-[var(--accent)] text-white" : "bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:bg-[var(--border)] dark:hover:bg-[#48484A]")}>
+              !serviceFilter ? "bg-[var(--accent)] text-white" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)] dark:hover:bg-[var(--border)]")}>
             全部
           </button>
           {services.map(svc => (
             <button key={svc} onClick={() => setServiceFilter(serviceFilter === svc ? null : svc)}
               className={cn("text-[10px] px-2 py-0.5 rounded-md transition-colors flex items-center gap-1",
-                serviceFilter === svc ? "text-white" : "bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:bg-[var(--border)] dark:hover:bg-[#48484A]")}
+                serviceFilter === svc ? "text-white" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--border)] dark:hover:bg-[var(--border)]")}
               style={serviceFilter === svc ? { backgroundColor: COLORS[svc] || "#86868B" } : {}}>
               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[svc] || "#86868B" }} />
               {svc}
@@ -104,7 +90,7 @@ export function TracePanel() {
           const traceTotal = displaySpans.reduce((sum, s) => sum + (s.duration_ms || 0), 0);
 
           return (
-            <div key={tid} className="border-t border-[var(--border)] dark:border-[#38383A] first:border-t-0">
+            <div key={tid} className="border-t border-[var(--border)] first:border-t-0">
               <div className="px-4 py-1.5 flex justify-between bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)]">
                 <span className="text-[10px] font-mono text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{tid.slice(0, 8)}</span>
                 <span className="text-[10px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)]">{displaySpans.length} spans · {ms(traceTotal)}</span>
@@ -126,14 +112,14 @@ export function TracePanel() {
                         {ms(s.duration_ms || 0)}
                       </span>
                     </div>
-                    <div className="mt-1 h-1 bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] rounded-full overflow-hidden">
+                    <div className="mt-1 h-1 bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all duration-300"
                         style={{ width: `${Math.max(pct, 0.5)}%`, backgroundColor: isError ? "#FF3B30" : color }} />
                     </div>
                     {s.tags && Object.keys(s.tags).length > 0 && (
                       <div className="flex gap-1 mt-1 flex-wrap">
                         {Object.entries(s.tags).slice(0, 4).map(([k, v]) => (
-                          <span key={k} className="text-[9px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] px-1 rounded">
+                          <span key={k} className="text-[9px] text-[var(--text-secondary)] bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] px-1 rounded">
                             {k}:{String(v).slice(0, 30)}
                           </span>
                         ))}

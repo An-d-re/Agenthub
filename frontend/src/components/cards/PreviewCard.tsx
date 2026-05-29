@@ -114,7 +114,7 @@ export function PreviewCard({ artifact }: Props) {
       <div className="flex justify-center w-full my-2 animate-fade-in">
         <div
           onClick={handleOpen}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[#34C759]/30 bg-[var(--success)]/5 hover:border-[#34C759]/60 cursor-pointer transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/5 hover:border-[var(--success)]/60 cursor-pointer transition-colors"
         >
           <span className="text-sm">🌐</span>
           <span className="text-xs font-mono truncate max-w-[160px]">{fileName}</span>
@@ -143,7 +143,7 @@ export function PreviewCard({ artifact }: Props) {
           </DialogHeader>
 
           {deployUrl && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--success)]/5 rounded-xl border border-[#34C759]/20 text-[13px]">
+            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--success)]/5 rounded-xl border border-[var(--success)]/20 text-[13px]">
               <span className="text-[var(--success)]">✅</span>
               <a href={deployUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] hover:underline font-mono text-[12px] truncate">
                 {deployUrl}
@@ -165,7 +165,7 @@ export function PreviewCard({ artifact }: Props) {
                 onClick={() => setDevice(p.key)}
                 className={cn(
                   "px-3 py-1.5 rounded-[12px] text-[12px] font-medium transition-all",
-                  device === p.key ? "bg-white dark:bg-[#3A3A3C] shadow-sm text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
+                  device === p.key ? "bg-white dark:bg-[var(--bg-tertiary)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 )}
               >
                 {p.label}

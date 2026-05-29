@@ -49,67 +49,68 @@ async def run_agent_reply(session_id: str, user_message: str):
 
     # Create adapter
     adapter = create_adapter(agent.adapter_type)
-    await adapter.initialize({
-        "api_key": None,  # uses settings env var as fallback
-        "model": None,    # uses adapter default
-        "system_prompt": agent.system_prompt or None,
-    })
-
-    context = AgentContext(
-        session_id=session_id,
-        agent_role=AgentRole.PLANNER,
-        conversation_history=conversation,
-    )
-
-    # Create agent message placeholder
-    agent_msg_id = None
-    async with async_session() as db:
-        msg = Message(session_id=session_id, role="agent", agent_id=agent.id, content="", message_type="text")
-        db.add(msg)
-        await db.commit()
-        await db.refresh(msg)
-        agent_msg_id = msg.id
-
-    # Stream tokens
-    full_content = ""
-    token_count = 0
     try:
-        async for token in adapter.stream_message(context, user_message):
-            full_content += token
-            token_count += 1
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
-            })
-    except Exception as e:
-        full_content = f"[Error: {e}]"
+        await adapter.initialize({
+            "api_key": None,  # uses settings env var as fallback
+            "model": None,    # uses adapter default
+            "system_prompt": agent.system_prompt or None,
+        })
 
-    # Update message with full content
-    async with async_session() as db:
-        msg = await db.get(Message, agent_msg_id)
-        if msg:
-            msg.content = full_content
-            msg.tokens_used = token_count
+        context = AgentContext(
+            session_id=session_id,
+            agent_role=AgentRole.PLANNER,
+            conversation_history=conversation,
+        )
+
+        # Create agent message placeholder
+        agent_msg_id = None
+        async with async_session() as db:
+            msg = Message(session_id=session_id, role="agent", agent_id=agent.id, content="", message_type="text")
+            db.add(msg)
             await db.commit()
+            await db.refresh(msg)
+            agent_msg_id = msg.id
 
-    # Send completion event
-    await event_bus.publish(session_id, {
-        "type": "chat.message",
-        "session_id": session_id,
-        "payload": {
-            "id": agent_msg_id,
+        # Stream tokens
+        full_content = ""
+        token_count = 0
+        try:
+            async for token in adapter.stream_message(context, user_message):
+                full_content += token
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
+                })
+        except Exception as e:
+            full_content = f"[Error: {e}]"
+
+        # Update message with full content
+        async with async_session() as db:
+            msg = await db.get(Message, agent_msg_id)
+            if msg:
+                msg.content = full_content
+                msg.tokens_used = token_count
+                await db.commit()
+
+        # Send completion event
+        await event_bus.publish(session_id, {
+            "type": "chat.message",
             "session_id": session_id,
-            "agent_id": agent.id,
-            "role": "agent",
-            "content": full_content,
-            "message_type": "text",
-            "tokens_used": token_count,
-            "created_at": _utcnow().isoformat(),
-        },
-    })
-
-    await adapter.stop()
+            "payload": {
+                "id": agent_msg_id,
+                "session_id": session_id,
+                "agent_id": agent.id,
+                "role": "agent",
+                "content": full_content,
+                "message_type": "text",
+                "tokens_used": token_count,
+                "created_at": _utcnow().isoformat(),
+            },
+        })
+    finally:
+        await adapter.stop()
 
 
 async def run_agent_modify(session_id: str, original_message_id: str, start_line: int, end_line: int, instruction: str):
@@ -142,96 +143,97 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
     )
 
     adapter = create_adapter(agent.adapter_type)
-    await adapter.initialize({
-        "api_key": None,
-        "model": None,
-        "system_prompt": agent.system_prompt or None,
-    })
-
-    context = AgentContext(
-        session_id=session_id,
-        agent_role=AgentRole.CODER,
-        conversation_history=[],
-    )
-
-    # Create agent message placeholder
-    agent_msg_id = None
-    async with async_session() as db:
-        msg = Message(
-            session_id=session_id,
-            role="agent",
-            agent_id=agent.id,
-            content="",
-            message_type="code",
-            parent_id=original_message_id,
-        )
-        db.add(msg)
-        await db.commit()
-        await db.refresh(msg)
-        agent_msg_id = msg.id
-
-    # Stream tokens
-    full_content = ""
-    token_count = 0
     try:
-        async for token in adapter.stream_message(context, modify_prompt):
-            full_content += token
-            token_count += 1
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
-            })
-    except Exception as e:
-        full_content = f"[Error: {e}]"
+        await adapter.initialize({
+            "api_key": None,
+            "model": None,
+            "system_prompt": agent.system_prompt or None,
+        })
 
-    # Update message with full content
-    async with async_session() as db:
-        msg = await db.get(Message, agent_msg_id)
-        if msg:
-            msg.content = full_content
-            msg.tokens_used = token_count
+        context = AgentContext(
+            session_id=session_id,
+            agent_role=AgentRole.CODER,
+            conversation_history=[],
+        )
+
+        # Create agent message placeholder
+        agent_msg_id = None
+        async with async_session() as db:
+            msg = Message(
+                session_id=session_id,
+                role="agent",
+                agent_id=agent.id,
+                content="",
+                message_type="code",
+                parent_id=original_message_id,
+            )
+            db.add(msg)
+            await db.commit()
+            await db.refresh(msg)
+            agent_msg_id = msg.id
+
+        # Stream tokens
+        full_content = ""
+        token_count = 0
+        try:
+            async for token in adapter.stream_message(context, modify_prompt):
+                full_content += token
+                token_count += 1
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": agent_msg_id, "token": token, "sequence": token_count},
+                })
+        except Exception as e:
+            full_content = f"[Error: {e}]"
+
+        # Update message with full content
+        async with async_session() as db:
+            msg = await db.get(Message, agent_msg_id)
+            if msg:
+                msg.content = full_content
+                msg.tokens_used = token_count
+                await db.commit()
+
+        # Extract artifacts for diff display
+        artifacts = _extract_artifacts_from_content(full_content, agent_msg_id, session_id)
+        async with async_session() as db:
+            for art in artifacts:
+                db.add(art)
             await db.commit()
 
-    # Extract artifacts for diff display
-    artifacts = _extract_artifacts_from_content(full_content, agent_msg_id, session_id)
-    async with async_session() as db:
-        for art in artifacts:
-            db.add(art)
-        await db.commit()
-
-    # Send completion event
-    await event_bus.publish(session_id, {
-        "type": "chat.message",
-        "session_id": session_id,
-        "payload": {
-            "id": agent_msg_id,
-            "session_id": session_id,
-            "agent_id": agent.id,
-            "role": "agent",
-            "content": full_content,
-            "message_type": "code",
-            "parent_id": original_message_id,
-            "tokens_used": token_count,
-            "created_at": _utcnow().isoformat(),
-        },
-    })
-
-    # Publish artifact events
-    for art in artifacts:
+        # Send completion event
         await event_bus.publish(session_id, {
-            "type": "artifact.created",
+            "type": "chat.message",
             "session_id": session_id,
             "payload": {
-                "artifact_id": art.id,
-                "task_id": None,
-                "file_path": art.file_path,
-                "language": art.language,
-                "content_preview": (art.modified_content or art.original_content or "")[:500],
+                "id": agent_msg_id,
+                "session_id": session_id,
+                "agent_id": agent.id,
+                "role": "agent",
+                "content": full_content,
+                "message_type": "code",
+                "parent_id": original_message_id,
+                "tokens_used": token_count,
+                "created_at": _utcnow().isoformat(),
             },
         })
 
-    await adapter.stop()
+        # Publish artifact events
+        for art in artifacts:
+            await event_bus.publish(session_id, {
+                "type": "artifact.created",
+                "session_id": session_id,
+                "payload": {
+                    "artifact_id": art.id,
+                    "task_id": None,
+                    "file_path": art.file_path,
+                    "language": art.language,
+                    "content_preview": (art.modified_content or art.original_content or "")[:500],
+                },
+            })
+    finally:
+        await adapter.stop()
 
 
 def _extract_artifacts_from_content(content: str, message_id: str, session_id: str):

@@ -67,8 +67,13 @@ async def apply_artifact(artifact_id: str, db: AsyncSession = Depends(get_db)):
     if not artifact.modified_content:
         raise HTTPException(400, "Artifact has no modified content to apply")
 
-    session_dir = WORKSPACES_DIR / artifact.session_id
-    target_path = session_dir / artifact.file_path.lstrip("/")
+    session_dir = (WORKSPACES_DIR / artifact.session_id).resolve()
+    raw_path = artifact.file_path.lstrip("/")
+    target_path = (session_dir / raw_path).resolve()
+
+    # 防止路径遍历攻击
+    if not str(target_path).startswith(str(session_dir) + os.sep) and target_path != session_dir:
+        raise HTTPException(403, "路径访问被拒绝")
 
     if target_path.exists():
         raise HTTPException(

@@ -11,6 +11,8 @@ from app.core.prompts import CODER_TASK_PROMPT
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.message import Message
+from app.models.artifact import Artifact
+from app.core.tracer import tracer
 from app.services.adapters.base import AgentContext, AgentRole
 
 logger = logging.getLogger(__name__)
@@ -119,9 +121,18 @@ class ExecutingHandler(BasePhaseHandler):
                 await orch.middleware.subagent_limiter.acquire(ctx.plan.session_id)
             try:
                 async with async_session() as task_db:
-                    task = await task_db.get(Task, task_id)
+                    # SELECT ... FOR UPDATE 防止并发执行同一任务
+                    result = await task_db.execute(
+                        select(Task).where(Task.id == task_id).with_for_update()
+                    )
+                    task = result.scalar_one_or_none()
+                    if not task or task.status != "pending":
+                        return
+                    task.status = "running"
+                    await task_db.flush()
+
                     task_plan = await task_db.get(Plan, ctx.plan.id)
-                    if task and task_plan and task.status == "pending":
+                    if task_plan:
                         await self._execute_single_task(
                             task_db, task_plan, task, ctx.mentions, ctx.plan.session_id, orch,
                         )
@@ -131,6 +142,9 @@ class ExecutingHandler(BasePhaseHandler):
                     orch.middleware.subagent_limiter.release(ctx.plan.session_id)
 
         await asyncio.gather(*[run_one(tid) for _, tid in ready])
+
+        # 刷新外层 session，使其看到内部提交的最新状态
+        ctx.db.expire_all()
 
         if orch and hasattr(orch, '_check_stop') and orch._check_stop():
             return
@@ -181,13 +195,21 @@ class ExecutingHandler(BasePhaseHandler):
         task.started_at = _utcnow()
         await db.flush()
         await self._publish_task_update(session_id, task, "running", pending)
+        await self._send_system_message(
+            db, session_id,
+            f"⏳ 正在执行任务「{task.title}」…",
+            agent_id=agent.id, agent_role=agent.role_type or "coder",
+            pending_events=pending,
+        )
 
+        from app.core.sandbox.manager import WORKSPACES_ROOT
         context = AgentContext(
             session_id=session_id,
             agent_role=AgentRole.CODER,
             conversation_history=conversation_history,
             current_task={"id": task.id, "title": task.title, "description": task.description},
             config={"system_prompt": CODER_TASK_PROMPT},
+            workspace_dir=str(WORKSPACES_ROOT / session_id),
         )
 
         try:
@@ -208,14 +230,57 @@ class ExecutingHandler(BasePhaseHandler):
             await db.flush()
 
             artifacts = await self._extract_artifacts(db, session_id, task, response.content, pending)
+
+            # 处理工具调用产生的 artifacts（Agent 通过 write_file 创建的文件）
+            for a in response.artifacts:
+                file_path = a.get("file_path", "")
+                # 跳过已在 _extract_artifacts 中通过文本解析创建的文件
+                if any(art.get("file_path") == file_path for art in artifacts):
+                    continue
+                art = Artifact(
+                    task_id=task.id, session_id=session_id,
+                    file_path=file_path,
+                    original_content="",
+                    modified_content=a.get("content", ""),
+                    language=a.get("language", ""),
+                    artifact_type="code",
+                )
+                db.add(art)
+                await db.flush()
+                artifacts.append({
+                    "id": art.id, "file_path": art.file_path,
+                    "language": art.language,
+                    "original_content": "", "modified_content": a.get("content", ""),
+                })
+                pending.append({
+                    "type": "artifact.created",
+                    "session_id": session_id,
+                    "payload": {
+                        "artifact_id": art.id, "task_id": task.id,
+                        "file_path": file_path, "language": a.get("language", ""),
+                        "original_content": "", "content_preview": a.get("content", "")[:200],
+                    },
+                })
+
             await self._publish_task_update(session_id, task, "done", pending)
 
-            # Sandbox 执行：对可执行代码自动运行并报告结果
-            sandbox_results = await self._run_in_sandbox(session_id, artifacts, pending)
+            # Sandbox 执行：仅对文本提取的代码块执行（工具创建的 Agent 已自行测试）
+            sandbox_results = []
+            text_artifacts = [a for a in artifacts if not any(
+                ra.get("file_path") == a.get("file_path") for ra in response.artifacts
+            )]
+            if text_artifacts:
+                sandbox_results = await self._run_in_sandbox(session_id, text_artifacts, pending)
 
             task.status = "reviewing"
             await db.flush()
             await self._publish_task_update(session_id, task, "reviewing", pending)
+            await self._send_system_message(
+                db, session_id,
+                f"🔍 正在审查任务「{task.title}」…",
+                agent_id=agent.id, agent_role="reviewer",
+                pending_events=pending,
+            )
 
             reviewed = await self._review_task_output(
                 db, session_id, task, response.content, pending, mentions,
@@ -271,14 +336,14 @@ class ExecutingHandler(BasePhaseHandler):
                 try:
                     await adapter.stop()
                 except Exception:
-                    pass
+                    logger.warning("Failed to stop adapter", exc_info=True)
             # 发布独立 session 的事件
             for evt in pending:
                 try:
                     from app.core.event_bus import event_bus
                     await event_bus.publish(session_id, evt)
                 except Exception:
-                    pass
+                    logger.warning("Failed to publish pending event", exc_info=True)
 
     async def _run_in_sandbox(
         self, session_id: str, artifacts: list[dict], pending: list[dict],

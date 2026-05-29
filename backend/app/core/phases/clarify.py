@@ -40,7 +40,7 @@ class ClarifyHandler(BasePhaseHandler):
         history = await self._get_conversation_history(ctx.db, ctx.plan.session_id)
         context = AgentContext(
             session_id=ctx.plan.session_id,
-            agent_role=AgentRole.PLANNER,
+            agent_role=AgentRole.CODER,  # Critic 通过 system_prompt 控制行为，role 仅用于 trace
             conversation_history=history,
             config={"system_prompt": CRITIC_SYSTEM_PROMPT},
         )
@@ -79,6 +79,11 @@ class ClarifyHandler(BasePhaseHandler):
         return None
 
     def _critic_has_signaled_done(self, content: str) -> bool:
-        signals = ["不再需要澄清", "可以往下推进", "需求已经明确", "可以开始了", "准备好了"]
+        signals = [
+            "不再需要澄清", "可以往下推进", "需求已经明确", "可以开始了", "准备好了",
+            "no further clarification", "ready to proceed", "requirements are clear",
+            "ready to move on", "no more questions", "i am ready",
+            "assumptions", "proceed with", "move forward",
+        ]
         lower = content.lower()
         return any(s.lower() in lower for s in signals)

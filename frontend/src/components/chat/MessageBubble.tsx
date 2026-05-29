@@ -25,7 +25,7 @@ const roleIcon = (role: string) => {
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; bubble: string }> = {
   critic:   { label: "Critic",  color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
-  planner:  { label: "Planner", color: "text-[var(--accent)]",        bg: "bg-[#007AFF]/8",           bubble: "bg-[#007AFF]/5" },
+  planner:  { label: "Planner", color: "text-[var(--accent)]",        bg: "bg-[var(--accent)]/8",     bubble: "bg-[var(--accent)]/5" },
   coder:    { label: "Coder",   color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
   reviewer: { label: "Reviewer",color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
 };
@@ -59,7 +59,6 @@ function QuotedPreview({ msg }: { msg: ChatMessage }) {
 export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Props) {
   const agents = useAgentStore(s => s.agents);
   const setReplyTarget = useChatStore(s => s.setReplyTarget);
-  const allMessages = useChatStore(s => s.messages);
   const [hovered, setHovered] = useState(false);
 
   const getAgentName = (agentId?: string) => {
@@ -68,10 +67,12 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     return agent?.name || "Agent";
   };
 
-  // 查找被引用的消息
-  const quotedMessage = message.parentId && message.messageType !== "modify"
-    ? (allMessages[message.sessionId] || []).find(m => m.id === message.parentId)
-    : null;
+  // 用 getState() 查找引用消息避免订阅整个 messages 导致 O(n) 重渲染
+  let quotedMessage: ChatMessage | null = null;
+  if (message.parentId && message.messageType !== "modify") {
+    quotedMessage = (useChatStore.getState().messages[message.sessionId] || [])
+      .find(m => m.id === message.parentId) || null;
+  }
 
   if (message.role === "system") {
     return (
@@ -106,7 +107,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     >
       <div className={cn(
         "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
-        isUser ? "bg-[#007AFF]/10" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]"
+        isUser ? "bg-[var(--accent)]/10" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]"
       )}>
         {isUser ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -145,7 +146,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
             {onRegenerate && (
               <button
                 onClick={() => onRegenerate(message.id)}
-                className="w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--success)] hover:border-[#34C759]/30 transition-all"
+                className="w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--success)] hover:border-[var(--success)]/30 transition-all"
                 title="重新生成"
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -201,7 +202,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               rel="noopener noreferrer"
               className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm transition-all max-w-[320px]"
             >
-              <div className="w-10 h-10 rounded-xl bg-[#007AFF]/10 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center shrink-0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
                 </svg>

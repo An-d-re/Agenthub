@@ -31,14 +31,14 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
           const isChosen = chosen === a.name;
           return (
             <div
-              key={i}
+              key={a.name || i}
               onClick={() => { setChosen(a.name); onSelect(a); }}
               className={cn(
                 "rounded-2xl border p-4 cursor-pointer transition-all duration-200",
                 "hover:border-accent/30",
                 isChosen
                   ? "border-accent bg-accent/[0.06] dark:bg-accent/[0.12] shadow-sm shadow-accent/10"
-                  : "border-border dark:border-[#38383A] bg-white/[0.01] dark:bg-[var(--bg-secondary)]"
+                  : "border-border bg-white/[0.01] dark:bg-[var(--bg-secondary)]"
               )}
             >
               <div className="flex items-center justify-between mb-2">
@@ -86,7 +86,7 @@ export function PlanCard({ approaches, onSelect, selected }: PlanCardProps) {
         <div className="flex justify-center gap-2 pt-1">
           {approaches.map((a, i) => (
             <Button
-              key={i}
+              key={`btn-${a.name || i}`}
               variant={chosen === a.name ? "default" : "outline"}
               size="sm"
               className="text-[12px] h-8 rounded-full px-4"

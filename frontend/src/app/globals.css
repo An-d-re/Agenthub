@@ -24,6 +24,24 @@
   --radius-xl: 24px;
   --sidebar-width: 240px;
   --right-panel-width: 340px;
+  /* shadcn/ui 兼容变量 — 映射到 Apple HIG 设计系统 */
+  --background: var(--bg-primary);
+  --foreground: var(--text-primary);
+  --card: var(--bg-secondary);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-primary);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--bg-secondary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --destructive-foreground: #FFFFFF;
+  --ring: var(--accent);
+  --radius: 0.75rem;
 }
 
 .dark {
@@ -42,9 +60,24 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
   --shadow-md: 0 2px 6px rgba(0,0,0,0.4);
   --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
+  /* shadcn/ui 暗色兼容变量 */
+  --background: var(--bg-primary);
+  --foreground: var(--text-primary);
+  --card: var(--bg-secondary);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-secondary);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: #FFFFFF;
+  --secondary: var(--bg-secondary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-tertiary);
+  --muted-foreground: var(--text-secondary);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --destructive-foreground: #FFFFFF;
+  --ring: var(--accent);
 }
-
-* { border-color: var(--border); }
 
 body {
   color: var(--text-primary);

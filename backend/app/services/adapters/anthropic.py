@@ -122,47 +122,174 @@ class AnthropicAdapter(BaseAdapter):
                 else:
                     raise
 
+    # ── 任务执行（Coder 角色，含工具调用循环）─────────────────
+
+    MAX_TOOL_ITERATIONS = 10
+
     async def execute_task(self, context: AgentContext, task: dict) -> AgentResponse:
         if self._fallback_to_deepseek:
             fb = await self._get_fallback()
             return await fb.execute_task(context, task)
 
+        import json
+        from app.core.sandbox.tools import get_tools_schema
+        from app.core.sandbox.manager import SandboxManager
+
+        # 转换工具 schema：OpenAI "parameters" → Anthropic "input_schema"
+        raw_tools = get_tools_schema()
+        tools = [
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "input_schema": t["parameters"],
+            }
+            for t in raw_tools
+        ]
+
+        sm: SandboxManager | None = None
+        workspace_dir = context.workspace_dir
+        if workspace_dir:
+            sm = SandboxManager(context.session_id)
+
         task_title = task.get("title", "")
         task_desc = task.get("description", "")
         task_prompt = (
             f"当前任务：{task_title}\n任务描述：{task_desc}\n\n"
-            "请完成上述任务。输出完整可用的代码，标注文件路径。"
+            "请完成上述任务。使用工具写代码、运行测试，验证通过后给出最终总结。"
         )
 
         system_prompt = context.config.get("system_prompt", "")
-        full_system = f"{system_prompt}\n\n{task_prompt}" if system_prompt else task_prompt
 
-        messages = self._build_messages(context, task_prompt)
+        # 构建 Anthropic 消息（不含 system，alternating user/assistant）
+        messages = []
+        for msg in context.conversation_history:
+            role = msg.get("role", "user")
+            if role in ("agent", "system"):
+                role = "assistant" if role == "agent" else "user"
+            messages.append({"role": role, "content": msg.get("content", "")})
+        messages.append({"role": "user", "content": task_prompt})
 
+        all_artifacts: list[dict] = []
+        all_tool_calls: list[dict] = []
+        final_content = ""
+
+        # ── ReAct 工具调用循环 ──────────────────────────────
+        for iteration in range(self.MAX_TOOL_ITERATIONS):
+            resp = await self._call_anthropic_with_retry(
+                system_prompt, messages, tools,
+            )
+            if resp is None:
+                return AgentResponse(content="[错误：任务执行失败]")
+
+            # 分析响应中的 content blocks
+            text_blocks = []
+            tool_use_blocks = []
+            for block in resp.content:
+                if block.type == "text":
+                    text_blocks.append(block.text)
+                elif block.type == "tool_use":
+                    tool_use_blocks.append(block)
+
+            # 无工具调用 → 完成
+            if not tool_use_blocks:
+                final_content = "\n".join(text_blocks)
+                break
+
+            # 追加 assistant 消息（保持 content blocks 结构）
+            assistant_content = []
+            for block in resp.content:
+                if block.type == "text":
+                    assistant_content.append({"type": "text", "text": block.text})
+                elif block.type == "tool_use":
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    })
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            # 执行工具并构建 tool_result
+            tool_results = []
+            for tb in tool_use_blocks:
+                tool_name = tb.name
+                tool_args = tb.input if isinstance(tb.input, dict) else {}
+
+                all_tool_calls.append({"name": tool_name, "arguments": tool_args})
+
+                if sm:
+                    result = await sm.execute_tool(tool_name, tool_args)
+                else:
+                    result = {"ok": False, "error": "沙箱不可用"}
+
+                if tool_name == "write_file" and result.get("ok"):
+                    path = tool_args.get("path", "")
+                    ext = path.rsplit(".", 1)[-1] if "." in path else ""
+                    lang_map = {
+                        "py": "python", "js": "javascript", "ts": "typescript",
+                        "html": "html", "css": "css", "json": "json", "md": "markdown",
+                    }
+                    all_artifacts.append({
+                        "file_path": path,
+                        "language": lang_map.get(ext, ext),
+                        "content": tool_args.get("content", ""),
+                    })
+
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tb.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+
+            messages.append({"role": "user", "content": tool_results})
+
+            logger.info(
+                "Anthropic execute_task 迭代 %d/%d: %d 个工具调用",
+                iteration + 1, self.MAX_TOOL_ITERATIONS, len(tool_use_blocks),
+            )
+
+        # 超过最大迭代次数 → 要求最终总结
+        if not final_content:
+            messages.append({
+                "role": "user",
+                "content": "已达到最大工具调用次数。请基于上述执行结果给出最终总结。",
+            })
+            resp = await self._call_anthropic_with_retry(system_prompt, messages, None)
+            if resp:
+                for block in resp.content:
+                    if block.type == "text":
+                        final_content += block.text
+
+        return AgentResponse(
+            content=final_content,
+            artifacts=all_artifacts,
+            tool_calls=all_tool_calls,
+        )
+
+    async def _call_anthropic_with_retry(
+        self, system_prompt: str, messages: list[dict], tools: list[dict] | None,
+    ):
+        """带重试的 Anthropic API 调用。"""
         for attempt, delay in enumerate(RETRY_DELAYS):
             try:
-                resp = await self._client.messages.create(
-                    model=self._model,
-                    max_tokens=8192,
-                    system=full_system,
-                    messages=messages[-20:],
-                )
-                content = ""
-                for block in resp.content:
-                    if hasattr(block, "text"):
-                        content += block.text
-                return AgentResponse(content=content)
-
+                kwargs = {
+                    "model": self._model,
+                    "max_tokens": 8192,
+                    "messages": messages,
+                }
+                if system_prompt:
+                    kwargs["system"] = system_prompt
+                if tools:
+                    kwargs["tools"] = tools
+                return await self._client.messages.create(**kwargs)
             except Exception as e:
                 logger.warning("Anthropic execute_task 第 %d 次尝试失败: %s", attempt + 1, e)
-                if self._is_retryable(e):
-                    if attempt < len(RETRY_DELAYS) - 1:
-                        import asyncio
-                        await asyncio.sleep(delay)
+                if self._is_retryable(e) and attempt < len(RETRY_DELAYS) - 1:
+                    import asyncio
+                    await asyncio.sleep(delay)
                 else:
                     raise
-
-        return AgentResponse(content="[错误：任务执行失败]")
+        return None
 
     async def review_result(
         self, context: AgentContext, original_task: dict, result: str
@@ -205,6 +332,14 @@ class AnthropicAdapter(BaseAdapter):
                     raise
 
         return AgentResponse(content='{"passed": false, "feedback": "审查失败", "suggested_changes": ""}')
+
+    async def stop(self) -> None:
+        if self._client:
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            self._client = None
 
     async def get_capabilities(self) -> dict:
         return {

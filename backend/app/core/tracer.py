@@ -6,11 +6,14 @@
 
 import time
 import uuid
+import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
 from app.core.database import async_session
 from app.core.event_bus import event_bus
+
+logger = logging.getLogger(__name__)
 
 
 class Tracer:
@@ -70,7 +73,7 @@ class Tracer:
                     db.add(trace)
                     await db.commit()
             except Exception:
-                pass  # trace 失败不影响主流程
+                logger.warning("Trace DB 持久化失败", exc_info=True)
 
             # 发布到 EventBus 供前端实时展示
             try:
@@ -89,7 +92,7 @@ class Tracer:
                     },
                 })
             except Exception:
-                pass
+                logger.warning("Trace EventBus 发布失败", exc_info=True)
 
 
 tracer = Tracer()

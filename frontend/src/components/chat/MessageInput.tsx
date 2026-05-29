@@ -107,7 +107,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
     <div className="px-4 pb-4 pt-2 shrink-0 relative">
       {/* 引用回复预览 */}
       {replyTarget && (
-        <div className="flex items-center gap-2 mb-2 px-4 py-2.5 rounded-2xl bg-[#007AFF]/5 border border-[var(--accent)]/10 animate-fade-in">
+        <div className="flex items-center gap-2 mb-2 px-4 py-2.5 rounded-2xl bg-[var(--accent)]/5 border border-[var(--accent)]/10 animate-fade-in">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
             <polyline points="9 17 4 12 9 7" /><path d="M4 12h10a6 6 0 0 1 6 6v1" />
           </svg>
@@ -127,7 +127,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           </button>
         </div>
       )}
-      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-white dark:focus-within:bg-[#3A3A3C] transition-all duration-200">
+      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-[var(--bg-primary)] transition-all duration-200">
         <input
           ref={fileInputRef}
           type="file"
@@ -136,7 +136,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           accept="image/*,.txt,.md,.py,.js,.ts,.tsx,.jsx,.json,.yml,.yaml,.html,.css,.sql,.sh,.pdf"
         />
         <button
-          className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[#007AFF]/10 transition-colors shrink-0 mb-0.5"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors shrink-0 mb-0.5"
           disabled={disabled || uploading || !activeSessionId}
           onClick={() => fileInputRef.current?.click()}
           title="上传文件"
@@ -185,7 +185,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
 
       {/* @Mention dropdown */}
       {mention.active && filteredAgents.length > 0 && (
-        <div className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
+        <div className="absolute bottom-full left-4 right-4 mb-2 bg-[var(--bg-primary)] rounded-xl shadow-lg border border-[var(--border)] max-h-[200px] overflow-y-auto z-50 animate-fade-in">
           {filteredAgents.map((agent, i) => (
             <button
               key={agent.id}
@@ -193,7 +193,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
               onMouseEnter={() => setHighlightIdx(i)}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
-                i === highlightIdx ? "bg-[#007AFF]/10" : "hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C]"
+                i === highlightIdx ? "bg-[var(--accent)]/10" : "hover:bg-[var(--bg-secondary)]"
               )}
             >
               <div className={cn(

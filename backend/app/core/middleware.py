@@ -13,6 +13,23 @@ from app.core.event_bus import event_bus
 
 logger = logging.getLogger(__name__)
 
+# 模块级 OpenAI client 缓存（ContextSummarizer 复用）
+_summarize_client = None
+
+
+async def _get_summarize_client():
+    global _summarize_client
+    if _summarize_client is None:
+        from openai import AsyncOpenAI
+        from app.core.config import settings
+        _summarize_client = AsyncOpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+            timeout=15.0,
+            trust_env=False,
+        )
+    return _summarize_client
+
 # ── Context ──────────────────────────────────────────────────
 
 
@@ -105,18 +122,12 @@ class ContextSummarizer(BaseMiddleware):
         )
 
         try:
-            from openai import AsyncOpenAI
             from app.core.config import settings
 
             if not settings.deepseek_api_key:
                 raise ValueError("DeepSeek API key 未配置")
 
-            client = AsyncOpenAI(
-                api_key=settings.deepseek_api_key,
-                base_url=settings.deepseek_base_url,
-                timeout=15.0,
-                trust_env=False,
-            )
+            client = await _get_summarize_client()
             response = await client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": summary_prompt}],
@@ -233,7 +244,7 @@ class SubagentLimiter(BaseMiddleware):
         # 不阻塞 middleware 链 — 只是标记如果超出限制则排队
         # 实际并发控制由 orchestrator 的调度逻辑完成
         # 这里只做检测和日志
-        if sem._value == 0:  # 已满
+        if sem.locked():
             logger.info("SubagentLimiter: session %s 已满 %d 并发, 当前任务将排队",
                         sid, self.MAX_CONCURRENT)
             # 通知前端

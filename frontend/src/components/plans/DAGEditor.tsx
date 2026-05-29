@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DAGTask } from "@/stores/chatStore";
@@ -22,6 +22,19 @@ const ROLE_LABELS: Record<string, string> = {
 export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
   const [checked, setChecked] = useState<Set<string>>(new Set(tasks.map((t) => t.id)));
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => {
+    setChecked((prev) => {
+      const next = new Set<string>();
+      tasks.forEach((t) => {
+        if (prev.has(t.id)) next.add(t.id);
+      });
+      tasks.forEach((t) => {
+        if (!next.has(t.id)) next.add(t.id);
+      });
+      return next;
+    });
+  }, [tasks]);
 
   if (tasks.length === 0) {
     return (
@@ -62,10 +75,10 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
             <div
               key={task.id}
               className={cn(
-                "rounded-2xl border p-4 transition-all duration-200 bg-white dark:bg-[var(--bg-secondary)]",
+                "rounded-2xl border p-4 transition-all duration-200 bg-[var(--bg-primary)] dark:bg-[var(--bg-secondary)]",
                 isChecked
-                  ? "border-[var(--border)] dark:border-[#38383A] hover:border-accent/30"
-                  : "border-[#E5E5E7]/50 dark:border-[#38383A]/50 opacity-50"
+                  ? "border-[var(--border)] hover:border-accent/30"
+                  : "border-[var(--border)]/50 opacity-50"
               )}
             >
               <div className="flex items-start gap-3">
@@ -76,7 +89,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                     "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-all",
                     isChecked
                       ? "bg-[var(--accent)] border-[var(--accent)]"
-                      : "border-[#C7C7CC]"
+                      : "border-[var(--text-tertiary)]"
                   )}
                 >
                   {isChecked && (
@@ -90,7 +103,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                     <span className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">
                       {task.id}. {task.title}
                     </span>
-                    <span className="text-[10px] font-medium text-[var(--accent)] bg-[#007AFF]/10 px-1.5 py-0.5 rounded-full">
+                    <span className="text-[10px] font-medium text-[var(--accent)] bg-[var(--accent)]/10 px-1.5 py-0.5 rounded-full">
                       {ROLE_LABELS[task.agent_role] || task.agent_role}
                     </span>
                   </div>
@@ -103,7 +116,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                     <div className="flex items-center gap-1 mt-1.5">
                       <span className="text-[10px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)]">依赖:</span>
                       {task.dependencies.map((dep) => (
-                        <span key={dep} className="text-[10px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] bg-[var(--bg-secondary)] dark:bg-[#3A3A3C] px-1.5 py-0.5 rounded-full">
+                        <span key={dep} className="text-[10px] text-[var(--text-secondary)] bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded-full">
                           {dep}
                         </span>
                       ))}
