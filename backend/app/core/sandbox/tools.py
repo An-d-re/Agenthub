@@ -88,6 +88,16 @@ def register_tool(
         "required": ["path", "content"],
     },
 )
+def _safe_path(workspace_dir: str, path: str) -> str:
+    """解析路径并确保不会逃逸出 workspace_dir。"""
+    import os
+    workspace = os.path.realpath(workspace_dir)
+    full = os.path.realpath(os.path.join(workspace, path))
+    if not full.startswith(workspace + os.sep) and full != workspace:
+        raise ValueError(f"路径逃逸: {path}")
+    return full
+
+
 async def write_file(path: str, content: str, workspace_dir: str) -> dict:
     try:
         full_path = _safe_path(workspace_dir, path)

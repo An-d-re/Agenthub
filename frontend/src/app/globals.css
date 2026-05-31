@@ -87,6 +87,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-size: 15px;
   line-height: 1.5;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Selection color */
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+::-moz-selection {
+  background: var(--accent);
+  color: #fff;
 }
 
 /* Focus ring */
@@ -109,8 +120,10 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) {
 }
 
 /* Scrollbar */
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 ::-webkit-scrollbar-thumb { background: #D1D1D6; border-radius: 100px; }
 ::-webkit-scrollbar-thumb:hover { background: #C7C7CC; }
 .dark ::-webkit-scrollbar-thumb { background: #48484A; }

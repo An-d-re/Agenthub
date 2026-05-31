@@ -11,7 +11,7 @@ import { MessageBubble } from "./MessageBubble";
 
 interface Props {
   onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
-  onPlanAction?: (action: string, taskId?: string, approachName?: string) => boolean;
+  onPlanAction?: (action: string, taskId?: string, approachName?: string, assignments?: Record<string, unknown>[]) => boolean;
   onRegenerate?: (messageId: string) => void;
   searchTerm?: string;
 }
@@ -71,15 +71,18 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
   useEffect(() => {
     // 用户已上滚查看历史时不强制滚到底部
     if (userScrolledUpRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // 流式接收时用 instant（避免抖动），消息稳定后用 smooth
+    const last = messages[messages.length - 1];
+    const isStreaming = last?.role === "agent" && (!last.content || last.reasoning !== undefined);
+    bottomRef.current?.scrollIntoView({ behavior: isStreaming ? "instant" : "smooth" });
   }, [messages, plan, confirmedPlan]);
 
   const handleSelectApproach = (approach: { name: string }) => {
     onPlanAction?.("select_approach", undefined, approach.name);
   };
 
-  const handleDagConfirm = () => {
-    onPlanAction?.("confirm");
+  const handleDagConfirm = (assignments: Record<string, unknown>[]) => {
+    onPlanAction?.("confirm", undefined, undefined, assignments);
     if (activeSessionId) clearConfirmedPlan(activeSessionId);
   };
 
@@ -102,6 +105,15 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
   // 最后一条是用户消息 → 显示等待 Agent 回复的思考动画
   const lastMsg = messages[messages.length - 1];
   const isThinking = lastMsg?.role === "user" && !showPlanCard && !showDagEditor;
+
+  // 过滤：卡片出现时隐藏临时进度提示
+  const displayMessages = (searchTerm
+    ? messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase()))
+    : messages
+  ).filter(m => {
+    if (m.messageType === "temp_progress" && (showPlanCard || showDagEditor)) return false;
+    return true;
+  });
 
   return (
     <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -135,13 +147,10 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
           发送消息开始对话
         </div>
       )}
-      {(searchTerm
-        ? messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase()))
-        : messages
-      ).map((msg, i) => (
+      {displayMessages.map((msg, i) => (
         <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} onModify={onModify} onRegenerate={onRegenerate} />
       ))}
-      {searchTerm && messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && messages.length > 0 && (
+      {searchTerm && displayMessages.length === 0 && messages.length > 0 && (
         <div className="text-center text-[var(--text-secondary)] mt-6 text-[13px]">无匹配消息</div>
       )}
 

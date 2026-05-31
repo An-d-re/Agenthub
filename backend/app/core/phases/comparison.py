@@ -2,7 +2,6 @@
 
 import json
 import logging
-from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.phases.base import BasePhaseHandler, PhaseContext
 from app.core.prompts import PLANNER_APPROACHES_PROMPT
 from app.models.message import Message
@@ -15,11 +14,16 @@ class ComparisonHandler(BasePhaseHandler):
     """生成多方案选项，解析用户选择后推进到 confirmed。"""
 
     async def execute(self, ctx: PhaseContext) -> str | None:
-        # 已有方案 → 解析用户选择
+        # 停止检查
+        if self._get_stop_event(ctx.plan.session_id) and self._get_stop_event(ctx.plan.session_id).is_set():
+            await self._send_system_message(
+                ctx.db, ctx.plan.session_id, "⏹️ 已停止生成。",
+                pending_events=ctx.pending_events,
+            )
+            return None
+
         if ctx.plan.approaches:
             return await self._handle_selection(ctx)
-
-        # 生成方案
         return await self._generate_approaches(ctx)
 
     async def _handle_selection(self, ctx: PhaseContext) -> str | None:
@@ -53,6 +57,13 @@ class ComparisonHandler(BasePhaseHandler):
             )
             return None
 
+        # 阶段进度提示
+        await self._send_system_message(
+            ctx.db, ctx.plan.session_id,
+            f"📋 **{agent.name}** 正在生成方案选项…",
+            pending_events=ctx.pending_events, publish_now=True,
+        )
+
         history = await self._get_conversation_history(ctx.db, ctx.plan.session_id)
         context = AgentContext(
             session_id=ctx.plan.session_id,
@@ -61,8 +72,11 @@ class ComparisonHandler(BasePhaseHandler):
             config={"system_prompt": PLANNER_APPROACHES_PROMPT},
         )
 
-        response = await adapter.send_message(context, ctx.user_message)
-        content = response.content
+        # 流式调用 + 停止检查
+        content = await self._stream_agent_response(
+            ctx.db, ctx.plan.session_id, adapter, agent, context,
+            ctx.user_message, ctx.pending_events, "planner",
+        )
 
         approaches = self._extract_json_array(content)
         if not approaches or not isinstance(approaches, list) or len(approaches) == 0:

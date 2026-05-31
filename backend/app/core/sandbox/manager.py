@@ -142,3 +142,23 @@ class SandboxManager:
                 logger.info("已清理工作目录: %s", self.workspace_dir)
         except Exception:
             logger.exception("清理工作目录失败: %s", self.workspace_dir)
+
+    def __del__(self):
+        self.cleanup()
+
+
+def cleanup_old_workspaces(max_age_hours: int = 24) -> None:
+    """启动时清理超过 max_age_hours 的遗留 workspace。"""
+    import time
+    if not WORKSPACES_ROOT.exists():
+        return
+    now = time.time()
+    for d in WORKSPACES_ROOT.iterdir():
+        if d.is_dir():
+            try:
+                age_hours = (now - d.stat().st_mtime) / 3600
+                if age_hours > max_age_hours:
+                    shutil.rmtree(d)
+                    logger.info("清理旧 workspace: %s (%.1f 小时前)", d, age_hours)
+            except Exception:
+                pass

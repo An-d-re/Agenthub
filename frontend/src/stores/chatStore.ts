@@ -7,6 +7,8 @@ export interface ChatMessage {
   agentRole?: string;  // critic | planner | coder | reviewer
   role: "user" | "agent" | "system";
   content: string;
+  reasoning?: string;  // 深度思考内容
+  reasoningId?: string;
   messageType: string;
   parentId?: string;
   codeSelection?: { start_line: number; end_line: number; message_id: string };
@@ -73,8 +75,25 @@ export interface DAGTask {
   title: string;
   description: string;
   dependencies: string[];
-  agent_role: string;
+  required_capability: string;  // calculate | code | verify | design | analyze | write | data
+  executor_type: "existing" | "new";  // 复用现有 Agent 还是新建
+  agent_id: string | null;
+  agent_name: string | null;
+  match_reason: string;
+  // 用户选择（DAG 确认时）
+  selected_agent_id?: string | null;   // 用户选中的现有 Agent ID
+  selected_adapter_type?: string;      // 用户为"新建"选的模型
+  selected_api_key?: string;           // 用户输入的 API Key（仅当模型未配置时）
   db_id: string;
+}
+
+export interface ModelOption {
+  adapter_type: string;
+  name: string;
+  icon: string;
+  description: string;
+  available: boolean;   // 已配置 API Key
+  needs_key: boolean;   // 需要用户提供 Key
 }
 
 export interface PlanData {
@@ -84,7 +103,6 @@ export interface PlanData {
 }
 
 export interface ConfirmedPlan {
-  messageId: string;
   tasks: DAGTask[];
   hint: string;
 }
@@ -116,6 +134,7 @@ interface ChatState {
   setActiveSession: (id: string | null) => void;
   addMessage: (sessionId: string, msg: ChatMessage) => void;
   appendStreamToken: (sessionId: string, msgId: string, token: string) => void;
+  appendReasoningToken: (sessionId: string, msgId: string, reasoningId: string, token: string) => void;
   setMessages: (sessionId: string, msgs: ChatMessage[]) => void;
   setConnectionStatus: (status: "disconnected" | "connecting" | "connected") => void;
   setPlan: (sessionId: string, plan: PlanData) => void;
@@ -132,12 +151,14 @@ interface ChatState {
   setReplyTarget: (target: ReplyTarget | null) => void;
   traceSpans: Record<string, TraceSpan[]>;
   addTraceSpan: (sessionId: string, span: TraceSpan) => void;
+  _finalizedIds: Set<string>;  // 已完成的消息 ID，防止流式 token 覆盖
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   sessions: [],
   activeSessionId: null,
   messages: {},
+  _finalizedIds: new Set(),
   plans: {},
   confirmedPlans: {},
   tasks: {},
@@ -155,20 +176,31 @@ export const useChatStore = create<ChatState>((set) => ({
   addMessage: (sessionId, msg) =>
     set((state) => {
       const prev = state.messages[sessionId] || [];
-      // If message with same id already exists (from streaming), replace it
       const existingIdx = prev.findIndex((m) => m.id === msg.id);
+      const finalized = new Set(state._finalizedIds);
+      // 有实际内容的消息标记为已完成
+      if (msg.content) finalized.add(msg.id);
       if (existingIdx >= 0) {
         const updated = [...prev];
-        updated[existingIdx] = msg;
-        return { messages: { ...state.messages, [sessionId]: updated } };
+        // 保留流式阶段的深度思考内容（最终消息不含 reasoning）
+        const existing = updated[existingIdx];
+        updated[existingIdx] = {
+          ...msg,
+          reasoning: msg.reasoning || existing.reasoning,
+          reasoningId: msg.reasoningId || existing.reasoningId,
+        };
+        return { messages: { ...state.messages, [sessionId]: updated }, _finalizedIds: finalized };
       }
       return {
         messages: { ...state.messages, [sessionId]: [...prev, msg] },
+        _finalizedIds: finalized,
       };
     }),
 
   appendStreamToken: (sessionId, msgId, token) =>
     set((state) => {
+      // 若最终消息已到达，忽略迟到的流式 token（防止覆盖完整内容）
+      if (state._finalizedIds.has(msgId)) return state;
       const prev = state.messages[sessionId] || [];
       const existingIdx = prev.findIndex((m) => m.id === msgId);
       if (existingIdx >= 0) {
@@ -176,7 +208,6 @@ export const useChatStore = create<ChatState>((set) => ({
         updated[existingIdx] = { ...updated[existingIdx], content: updated[existingIdx].content + token };
         return { messages: { ...state.messages, [sessionId]: updated } };
       }
-      // Create a new streaming placeholder
       return {
         messages: {
           ...state.messages,
@@ -190,6 +221,40 @@ export const useChatStore = create<ChatState>((set) => ({
           }],
         },
       };
+    }),
+
+  appendReasoningToken: (sessionId, msgId, reasoningId, token) =>
+    set((state) => {
+      // 找到对应的消息（可能由 reasoning token 首次创建，或已存在）
+      const prev = state.messages[sessionId] || [];
+      // 优先通过主消息 ID 找
+      const existingIdx = prev.findIndex((m) => m.id === msgId);
+      if (existingIdx < 0) {
+        // 如果主消息还没创建（reasoning 比 content 先到），创建占位
+        return {
+          messages: {
+            ...state.messages,
+            [sessionId]: [...prev, {
+              id: msgId,
+              sessionId,
+              role: "agent",
+              content: "",
+              reasoning: token,
+              reasoningId,
+              messageType: "text",
+              createdAt: new Date().toISOString(),
+            }],
+          },
+        };
+      }
+      const updated = [...prev];
+      const msg = updated[existingIdx];
+      updated[existingIdx] = {
+        ...msg,
+        reasoning: (msg.reasoning || "") + token,
+        reasoningId: reasoningId,
+      };
+      return { messages: { ...state.messages, [sessionId]: updated } };
     }),
 
   setMessages: (sessionId, msgs) =>

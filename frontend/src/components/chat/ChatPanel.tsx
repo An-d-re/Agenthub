@@ -19,8 +19,9 @@ export function ChatPanel() {
   const agents = useAgentStore((s) => s.agents);
   const { sendMessage, sendModify, sendPlanAction, sendSessionControl } = useWebSocket(activeSessionId);
 
-  // 连接状态横幅
+  // 连接状态横幅（仅在有活跃会话时显示）
   useEffect(() => {
+    if (!activeSessionId) { setConnBanner(null); return; }
     if (connectionStatus === "disconnected") {
       setConnBanner("reconnecting");
     } else if (connectionStatus === "connected" && connBanner === "reconnecting") {
@@ -29,7 +30,7 @@ export function ChatPanel() {
       return () => clearTimeout(t);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- adding connBanner causes infinite loop
-  }, [connectionStatus]);
+  }, [connectionStatus, activeSessionId]);
   const [showMenu, setShowMenu] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -37,8 +38,14 @@ export function ChatPanel() {
   const [connBanner, setConnBanner] = useState<"reconnecting"|"restored"|null>(null);
   const [messageSearch, setMessageSearch] = useState("");
 
+  const [sendError, setSendError] = useState(false);
+
   const handleSend = (content: string, quoteMessageId?: string) => {
-    sendMessage(content, quoteMessageId);
+    const ok = sendMessage(content, quoteMessageId);
+    if (!ok) {
+      setSendError(true);
+      setTimeout(() => setSendError(false), 4000);
+    }
   };
 
   const handleRegenerate = (agentMessageId: string) => {
@@ -71,6 +78,17 @@ export function ChatPanel() {
   const lastMsg = messages[messages.length - 1];
   const hasRunningTasks = tasks.some(t => t.status === "running" || t.status === "reviewing");
   const isThinking = lastMsg?.role === "user" || hasRunningTasks;
+  const [thinkingTimedOut, setThinkingTimedOut] = useState(false);
+
+  // isThinking 超时防护：超过 60s 无回复自动重置
+  useEffect(() => {
+    if (!isThinking) { setThinkingTimedOut(false); return; }
+    const t = setTimeout(() => setThinkingTimedOut(true), 60000);
+    return () => clearTimeout(t);
+  }, [isThinking, messages.length]);
+
+  // isThinking 超时时视为未在思考
+  const effectiveThinking = isThinking && !thinkingTimedOut;
 
   const [sessionAgents, setSessionAgents] = useState<string[]>([]);
   useEffect(() => {
@@ -128,8 +146,12 @@ export function ChatPanel() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-[var(--success)] animate-pulse-blue" : connectionStatus==="connecting"?"bg-[var(--warning)] animate-pulse":"bg-[var(--text-tertiary)]")} />
-          <span className="text-[12px] text-[var(--text-secondary)]">{isConnected?"在线":connectionStatus==="connecting"?"连接中":"离线"}</span>
+          {activeSessionId && (
+            <>
+              <div className={cn("w-2 h-2 rounded-full", isConnected ? "bg-[var(--success)] animate-pulse-blue" : connectionStatus==="connecting"?"bg-[var(--warning)] animate-pulse":"bg-[var(--text-tertiary)]")} />
+              <span className="text-[12px] text-[var(--text-secondary)]">{isConnected?"在线":connectionStatus==="connecting"?"连接中":"离线"}</span>
+            </>
+          )}
           {activeSession?.type === "group" && (
             <button
               onClick={() => sendSessionControl("stop")}
@@ -152,6 +174,15 @@ export function ChatPanel() {
                     className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors">管理成员</button>
                   <button onClick={()=>{setTitle(activeSession?.title||"");setEditingTitle(true);}}
                     className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors">重命名</button>
+                  <button onClick={() => {
+                    if (activeSessionId) {
+                      const a = document.createElement("a");
+                      a.href = `${API_BASE}/api/sessions/${activeSessionId}/export`;
+                      a.download = "";
+                      a.click();
+                    }
+                  }}
+                    className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors">导出对话</button>
                 </div>
               )}
             </div>
@@ -219,7 +250,10 @@ export function ChatPanel() {
       )}
 
       <MessageList onModify={sendModify} onPlanAction={sendPlanAction} onRegenerate={handleRegenerate} searchTerm={messageSearch} />
-      <MessageInput onSend={handleSend} disabled={!isConnected} isThinking={isThinking} onStop={() => sendSessionControl("stop")} />
+      {sendError && (
+        <div className="text-center text-[13px] text-[var(--danger)] py-1">发送失败，正在重连…</div>
+      )}
+      <MessageInput onSend={handleSend} disabled={false} isThinking={effectiveThinking} onStop={() => sendSessionControl("stop")} />
 
       {showMembers && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>

@@ -54,6 +54,13 @@ class ConfirmedHandler(BasePhaseHandler):
             )
             return None
 
+        # 阶段进度提示
+        await self._send_system_message(
+            ctx.db, ctx.plan.session_id,
+            f"📐 **{agent.name}** 正在分解任务计划…",
+            pending_events=ctx.pending_events, publish_now=True,
+        )
+
         decompose_input = (
             f"已选方案：{ctx.plan.selected_approach}\n"
             f"方案详情：{json.dumps(ctx.plan.approaches, ensure_ascii=False)}\n\n"
@@ -68,8 +75,11 @@ class ConfirmedHandler(BasePhaseHandler):
             config={"system_prompt": PLANNER_DECOMPOSE_PROMPT},
         )
 
-        response = await adapter.send_message(context, decompose_input)
-        content = response.content
+        # 流式调用 + 停止检查
+        content = await self._stream_agent_response(
+            ctx.db, ctx.plan.session_id, adapter, agent, context,
+            decompose_input, ctx.pending_events, "planner",
+        )
 
         task_dag = self._extract_json_array(content)
         if not task_dag or not isinstance(task_dag, list) or len(task_dag) == 0:

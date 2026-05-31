@@ -10,6 +10,35 @@ import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { CodeBlock } from "./CodeBlock";
 
+// ── 深度思考折叠块 ──
+
+function ReasoningBlock({ reasoning }: { reasoning: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-1 ml-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--accent)] transition-colors py-1 whitespace-nowrap select-none"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={cn("transition-transform shrink-0", open && "rotate-90")}>
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+        <span className="font-medium shrink-0">深度思考</span>
+        <span className="text-[var(--text-tertiary)] shrink-0">({reasoning.length} 字)</span>
+      </button>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="mt-1 rounded-xl bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] border border-[var(--border)] dark:border-[#48484A] px-3 py-2 text-[13px] text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto"
+        >
+          {reasoning}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
 // ── Role badge config ──
 
 const roleIcon = (role: string) => {
@@ -166,6 +195,10 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               <polyline points="9 17 4 12 9 7" /><path d="M4 12h10a6 6 0 0 1 6 6v1" />
             </svg>
           </button>
+        )}
+        {/* 深度思考（可折叠） */}
+        {!isUser && message.reasoning && (
+          <ReasoningBlock reasoning={message.reasoning} />
         )}
         <div className={cn(
           "rounded-2xl px-4 py-3 text-[15px] leading-relaxed shadow-sm",

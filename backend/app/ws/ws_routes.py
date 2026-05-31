@@ -9,6 +9,8 @@ import json
 import logging
 from datetime import datetime, timezone
 
+logger = logging.getLogger(__name__)
+
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,6 +92,7 @@ async def websocket_endpoint(
 async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
     """Persist a user message and broadcast it."""
     content = payload.get("content", "")
+    logger.info("chat.send session=%s content=%s", session_id, content[:80])
     if not content.strip():
         return
 
@@ -137,7 +140,26 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
     # 根据会话类型分发：群聊走 Orchestrator，单聊走 Agent Runner
     if session_type == "group":
         from app.core.orchestrator import Orchestrator
-        asyncio.create_task(Orchestrator(session_id).handle_message(content, mentions=mentions))
+        # 检查锁状态：如果锁被占用，立即发排队通知
+        lock = Orchestrator._locks.get(session_id)
+        if lock and lock.locked():
+            await event_bus.publish(session_id, {
+                "type": "chat.message",
+                "session_id": session_id,
+                "payload": {
+                    "id": f"queue-{message.id}",
+                    "role": "system",
+                    "content": "⏳ 消息已排队，正在处理前一条消息…",
+                    "message_type": "system",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+            })
+        async def _run_orch():
+            try:
+                await Orchestrator(session_id).handle_message(content, mentions=mentions)
+            except Exception as e:
+                logger.exception("Orchestrator task CRASH session=%s: %s", session_id, e)
+        asyncio.create_task(_run_orch())
     else:
         asyncio.create_task(_trigger_agent(session_id, content))
 
@@ -198,7 +220,7 @@ async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
 
 
 async def _handle_plan_action(session_id: str, payload: dict):
-    """Handle plan.action — select approach / confirm plan / delete task from DAG."""
+    """Handle plan.action — select approach / confirm plan (with assignments) / delete task from DAG."""
     action = payload.get("action", "")
     if action == "select_approach":
         approach_name = payload.get("approach_name", "")
@@ -206,8 +228,9 @@ async def _handle_plan_action(session_id: str, payload: dict):
             from app.core.orchestrator import Orchestrator
             asyncio.create_task(Orchestrator(session_id).select_approach(approach_name))
     elif action == "confirm":
+        assignments = payload.get("assignments", [])
         from app.core.orchestrator import Orchestrator
-        asyncio.create_task(Orchestrator(session_id).confirm_plan())
+        asyncio.create_task(Orchestrator(session_id).confirm_plan(assignments))
     elif action == "delete_task":
         task_id = payload.get("task_id", "")
         if task_id:

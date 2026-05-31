@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, Union
 
 
 class AgentRole(str, Enum):
@@ -35,6 +35,17 @@ class AgentResponse:
     tool_calls: list[dict] = field(default_factory=list)
 
 
+@dataclass
+class StreamToken:
+    """流式 token，区分推理内容和回复内容。"""
+    type: str  # "content" | "reasoning"
+    text: str
+
+
+# stream_message 的返回类型：可以是字符串（向后兼容）或 StreamToken
+StreamTokenType = Union[str, StreamToken]
+
+
 class BaseAdapter(ABC):
     """Abstract adapter for AI agent backends.
 
@@ -50,7 +61,7 @@ class BaseAdapter(ABC):
     async def send_message(self, context: AgentContext, message: str) -> AgentResponse: ...
 
     @abstractmethod
-    async def stream_message(self, context: AgentContext, message: str) -> AsyncIterator[str]: ...
+    async def stream_message(self, context: AgentContext, message: str) -> AsyncIterator[StreamTokenType]: ...
 
     @abstractmethod
     async def execute_task(self, context: AgentContext, task: dict) -> AgentResponse: ...

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 from app.core.middleware import MiddlewareContext
 from app.core.phases.base import BasePhaseHandler, PhaseContext, _utcnow
-from app.core.prompts import CODER_TASK_PROMPT
+from app.core.prompts import CODER_TASK_PROMPT, VERIFIER_TASK_PROMPT
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.message import Message
@@ -115,31 +115,27 @@ class ExecutingHandler(BasePhaseHandler):
 
         logger.info("并行执行 %d 个就绪任务", len(ready))
 
-        async def run_one(task_id: str) -> None:
-            # 获取 orchestrator 的 semaphore
-            if orch and hasattr(orch, 'middleware'):
-                await orch.middleware.subagent_limiter.acquire(ctx.plan.session_id)
-            try:
-                async with async_session() as task_db:
-                    # SELECT ... FOR UPDATE 防止并发执行同一任务
-                    result = await task_db.execute(
-                        select(Task).where(Task.id == task_id).with_for_update()
-                    )
-                    task = result.scalar_one_or_none()
-                    if not task or task.status != "pending":
-                        return
-                    task.status = "running"
-                    await task_db.flush()
+        # 提交父 session 释放写锁，让 run_one 的独立 session 可以并发写入
+        await ctx.db.commit()
 
-                    task_plan = await task_db.get(Plan, ctx.plan.id)
-                    if task_plan:
-                        await self._execute_single_task(
-                            task_db, task_plan, task, ctx.mentions, ctx.plan.session_id, orch,
-                        )
-                    await task_db.commit()
-            finally:
-                if orch and hasattr(orch, 'middleware'):
-                    orch.middleware.subagent_limiter.release(ctx.plan.session_id)
+        async def run_one(task_id: str) -> None:
+            async with async_session() as task_db:
+                # SELECT ... FOR UPDATE 防止并发执行同一任务
+                result = await task_db.execute(
+                    select(Task).where(Task.id == task_id).with_for_update()
+                )
+                task = result.scalar_one_or_none()
+                if not task or task.status != "pending":
+                    return
+                task.status = "running"
+                await task_db.flush()
+
+                task_plan = await task_db.get(Plan, ctx.plan.id)
+                if task_plan:
+                    await self._execute_single_task(
+                        task_db, task_plan, task, ctx.mentions, ctx.plan.session_id, orch,
+                    )
+                await task_db.commit()
 
         await asyncio.gather(*[run_one(tid) for _, tid in ready])
 
@@ -182,13 +178,43 @@ class ExecutingHandler(BasePhaseHandler):
                 return
             conversation_history = mw_ctx.conversation_history
 
-        agent, adapter = await self._get_agent_for_role(
-            db, session_id, "coder", mentions,
-            task_context={"title": task.title, "description": task.description or ""},
-        )
+        # 从 DAG 中解析任务所需能力（required_capability）
+        capability = self._resolve_task_capability(plan, task)
+        role_name = capability  # calculate / code / verify / design / analyze / write / data
+
+        # 优先使用 DAG 分配的 agent，回退到按角色查找
+        if task.assigned_agent_id:
+            agent, adapter = await self._get_agent_adapter(db, task.assigned_agent_id)
+        else:
+            from app.core.agent_factory import match_task_to_agent, create_temp_agent
+            match = await match_task_to_agent(db, session_id, capability, set())
+            if match.matched and match.agent:
+                agent, adapter = await self._get_agent_adapter(db, match.agent.id)
+                task.assigned_agent_id = match.agent.id
+            else:
+                agent, adapter = None, None
+        if not agent or not adapter:
+            # 兜底：自动创建临时 Agent
+            from app.core.agent_factory import create_temp_agent
+            agent = await create_temp_agent(
+                db, session_id, task, capability, "deepseek",
+            )
+            task.assigned_agent_id = agent.id
+            _, adapter = await self._get_agent_adapter(db, agent.id)
+            pending.append({
+                "type": "agent.created",
+                "session_id": session_id,
+                "payload": {
+                    "id": agent.id, "name": agent.name,
+                    "role_type": agent.role_type,
+                    "adapter_type": agent.adapter_type,
+                    "capability_tags": agent.capability_tags,
+                    "is_deletable": agent.is_deletable,
+                },
+            })
         if not agent or not adapter:
             task.status = "blocked"
-            task.error_message = "找不到合适的 Agent"
+            task.error_message = "找不到合适的 Agent 且无法创建"
             return
 
         task.status = "running"
@@ -198,31 +224,52 @@ class ExecutingHandler(BasePhaseHandler):
         await self._send_system_message(
             db, session_id,
             f"⏳ 正在执行任务「{task.title}」…",
-            agent_id=agent.id, agent_role=agent.role_type or "coder",
+            agent_id=agent.id, agent_role=agent.role_type or role_name,
             pending_events=pending,
         )
+
+        # 根据任务能力选择系统提示词
+        task_prompt = VERIFIER_TASK_PROMPT if capability == "verify" else CODER_TASK_PROMPT
+
+        agent_role = self._capability_to_agent_role(capability)
 
         from app.core.sandbox.manager import WORKSPACES_ROOT
         context = AgentContext(
             session_id=session_id,
-            agent_role=AgentRole.CODER,
+            agent_role=agent_role,
             conversation_history=conversation_history,
             current_task={"id": task.id, "title": task.title, "description": task.description},
-            config={"system_prompt": CODER_TASK_PROMPT},
+            config={"system_prompt": task_prompt},
             workspace_dir=str(WORKSPACES_ROOT / session_id),
         )
 
+        # 停止检查
+        stop_evt = self._get_stop_event(session_id)
+        if stop_evt and stop_evt.is_set():
+            task.status = "cancelled"
+            task.error_message = "用户停止执行"
+            await db.flush()
+            await self._publish_task_update(session_id, task, "cancelled", pending)
+            return
+
         try:
-            async with tracer.span(
-                session_id=session_id,
-                operation_name="adapter.execute_task",
-                service_name=adapter.adapter_type,
-                tags={"task_id": task.id, "task_title": task.title},
-            ) as span:
-                response = await adapter.execute_task(context, {
-                    "id": task.id, "title": task.title, "description": task.description,
-                })
-                span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+            # 信号量只包 API 调用，不包重试
+            if orch and hasattr(orch, 'middleware'):
+                await orch.middleware.subagent_limiter.acquire(session_id)
+            try:
+                async with tracer.span(
+                    session_id=session_id,
+                    operation_name="adapter.execute_task",
+                    service_name=adapter.adapter_type,
+                    tags={"task_id": task.id, "task_title": task.title},
+                ) as span:
+                    response = await adapter.execute_task(context, {
+                        "id": task.id, "title": task.title, "description": task.description,
+                    })
+                    span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+            finally:
+                if orch and hasattr(orch, 'middleware'):
+                    orch.middleware.subagent_limiter.release(session_id)
 
             task.result = response.content
             task.status = "done"
@@ -264,49 +311,64 @@ class ExecutingHandler(BasePhaseHandler):
 
             await self._publish_task_update(session_id, task, "done", pending)
 
-            # Sandbox 执行：仅对文本提取的代码块执行（工具创建的 Agent 已自行测试）
-            sandbox_results = []
-            text_artifacts = [a for a in artifacts if not any(
-                ra.get("file_path") == a.get("file_path") for ra in response.artifacts
-            )]
-            if text_artifacts:
-                sandbox_results = await self._run_in_sandbox(session_id, text_artifacts, pending)
-
-            task.status = "reviewing"
-            await db.flush()
-            await self._publish_task_update(session_id, task, "reviewing", pending)
-            await self._send_system_message(
-                db, session_id,
-                f"🔍 正在审查任务「{task.title}」…",
-                agent_id=agent.id, agent_role="reviewer",
-                pending_events=pending,
-            )
-
-            reviewed = await self._review_task_output(
-                db, session_id, task, response.content, pending, mentions,
-            )
-            if not reviewed:
-                await db.flush()
-                # 重试
-                await self._execute_single_task(db, plan, task, mentions, session_id)
-                return
-
-            preview = response.content[:300] + ("…" if len(response.content) > 300 else "")
-            lines = [f"✅ 任务「{task.title}」完成。"]
-            if artifacts:
-                lines.append(f"\n生成了 {len(artifacts)} 个文件：")
-                lines.extend(f"  • `{a['file_path']}`" for a in artifacts)
+            # verify 任务：Agent 输出直接展示在聊天流中
+            if capability == "verify":
+                preview = response.content[:500] + ("…" if len(response.content) > 500 else "")
+                await self._send_system_message(
+                    db, session_id,
+                    preview,
+                    agent_id=agent.id, agent_role="verify", pending_events=pending,
+                )
             else:
-                lines.append(f"\n{preview}")
-            if sandbox_results:
-                lines.append(f"\n🏗️ 沙箱执行结果：")
-                for sr in sandbox_results:
-                    status = "✅" if sr.get("ok") else "❌"
-                    lines.append(f"  {status} `{sr['file']}` — {sr.get('message', sr.get('error', ''))[:150]}")
-            await self._send_system_message(
-                db, session_id, "\n".join(lines),
-                agent_id=agent.id, agent_role="coder", pending_events=pending,
-            )
+                # Sandbox 执行：仅对文本提取的代码块执行（工具创建的 Agent 已自行测试）
+                sandbox_results = []
+                text_artifacts = [a for a in artifacts if not any(
+                    ra.get("file_path") == a.get("file_path") for ra in response.artifacts
+                )]
+                if text_artifacts:
+                    sandbox_results = await self._run_in_sandbox(session_id, text_artifacts, pending)
+
+                task.status = "reviewing"
+                await db.flush()
+                await self._publish_task_update(session_id, task, "reviewing", pending)
+                await self._send_system_message(
+                    db, session_id,
+                    f"🔍 正在审查任务「{task.title}」…",
+                    agent_id=agent.id, agent_role="reviewer",
+                    pending_events=pending,
+                )
+
+                reviewed = await self._review_task_output(
+                    db, session_id, task, response.content, pending, mentions,
+                )
+                if not reviewed:
+                    await db.flush()
+                    if task.status != "dispute":
+                        await self._execute_single_task(db, plan, task, mentions, session_id)
+                    return
+
+                # Agent 输出直接展示在聊天流中（作为 agent 消息，非 system）
+                preview = response.content[:500] + ("…" if len(response.content) > 500 else "")
+                await self._send_system_message(
+                    db, session_id, preview,
+                    agent_id=agent.id, agent_role=capability, pending_events=pending,
+                )
+                if artifacts:
+                    lines = [f"📁 生成了 {len(artifacts)} 个文件："]
+                    lines.extend(f"  • `{a['file_path']}`" for a in artifacts)
+                    await self._send_system_message(
+                        db, session_id, "\n".join(lines),
+                        pending_events=pending,
+                    )
+                if sandbox_results:
+                    lines = ["🏗️ 沙箱执行结果："]
+                    for sr in sandbox_results:
+                        status = "✅" if sr.get("ok") else "❌"
+                        lines.append(f"  {status} `{sr['file']}` — {sr.get('message', sr.get('error', ''))[:150]}")
+                    await self._send_system_message(
+                        db, session_id, "\n".join(lines),
+                        pending_events=pending,
+                    )
 
         except Exception as e:
             logger.exception("任务执行失败: %s", e)
@@ -344,6 +406,28 @@ class ExecutingHandler(BasePhaseHandler):
                     await event_bus.publish(session_id, evt)
                 except Exception:
                     logger.warning("Failed to publish pending event", exc_info=True)
+
+    def _resolve_task_capability(self, plan: Plan, task: Task) -> str:
+        """从 DAG 中解析任务所需能力，回退到 'code'。"""
+        task_dag = plan.task_dag or []
+        db_id = str(task.id)
+        for td in task_dag:
+            if td.get("_db_id") == db_id or td.get("id") == task.title:
+                return td.get("required_capability", "code")
+        return "code"
+
+    def _capability_to_agent_role(self, capability: str) -> AgentRole:
+        """能力类型 → AgentRole（用于 tracer 和日志）。"""
+        mapping = {
+            "calculate": AgentRole.CODER,
+            "code": AgentRole.CODER,
+            "verify": AgentRole.REVIEWER,
+            "design": AgentRole.PLANNER,
+            "analyze": AgentRole.CODER,
+            "write": AgentRole.CODER,
+            "data": AgentRole.CODER,
+        }
+        return mapping.get(capability, AgentRole.CODER)
 
     async def _run_in_sandbox(
         self, session_id: str, artifacts: list[dict], pending: list[dict],

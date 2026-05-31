@@ -1,6 +1,7 @@
 """DeepSeek 适配器 —— 通过 OpenAI 兼容 HTTP API 调用。
 
 支持流式和非流式两种模式，内置指数退避重试（1s/2s/4s，最多 3 次）。
+支持 DeepSeek 深度思考模式（reasoning_content）。
 """
 
 import logging
@@ -10,7 +11,9 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
-from app.services.adapters.base import AgentContext, AgentResponse, BaseAdapter
+from app.services.adapters.base import (
+    AgentContext, AgentResponse, BaseAdapter, StreamToken,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +26,13 @@ class DeepSeekAdapter(BaseAdapter):
     def __init__(self):
         self._client: AsyncOpenAI | None = None
         self._model: str = "deepseek-chat"
+        self._deep_thinking: bool = False
 
     async def initialize(self, config: dict) -> None:
         api_key = config.get("api_key") or settings.deepseek_api_key
         base_url = config.get("base_url") or settings.deepseek_base_url
         self._model = config.get("model") or "deepseek-chat"
+        self._deep_thinking = config.get("deep_thinking", False)
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url, http_client=httpx.AsyncClient(trust_env=False))
 
     # ── 消息构建 ──────────────────────────────────────────────
@@ -83,22 +88,32 @@ class DeepSeekAdapter(BaseAdapter):
 
     # ── 流式调用（单聊 Agent Runner）──────────────────────────
 
-    async def stream_message(self, context: AgentContext, message: str) -> AsyncIterator[str]:
+    async def stream_message(self, context: AgentContext, message: str) -> AsyncIterator[StreamToken]:
         messages = self._build_messages(context, message)
+        api_kwargs = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 4096,
+            "stream": True,
+        }
+        if self._deep_thinking:
+            api_kwargs["extra_body"] = {"thinking": {"type": "enabled"}}
 
         for attempt, delay in enumerate(RETRY_DELAYS):
             try:
-                stream = await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=4096,
-                    stream=True,
-                )
+                stream = await self._client.chat.completions.create(**api_kwargs)
                 async for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
-                    if delta and delta.content:
-                        yield delta.content
+                    if not delta:
+                        continue
+                    # 深度思考内容（推理链）
+                    reasoning = getattr(delta, "reasoning_content", None) or ""
+                    if reasoning:
+                        yield StreamToken(type="reasoning", text=reasoning)
+                    # 正常回复内容
+                    if delta.content:
+                        yield StreamToken(type="content", text=delta.content)
                 return  # 成功，退出重试循环
 
             except Exception as e:
