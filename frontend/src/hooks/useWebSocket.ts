@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useChatStore } from "@/stores/chatStore";
+import { useAgentStore } from "@/stores/agentStore";
 import { WS_BASE, API_BASE } from "@/lib/constants";
 
 const RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30];  // 重连间隔（秒），最多约 2 分钟
@@ -140,7 +141,6 @@ export function useWebSocket(sessionId: string | null) {
           });
         } else if (msg.type === "plan.confirmed") {
           store.setConfirmedPlan(sessionId, {
-            messageId: p.message_id || "",
             tasks: p.tasks || [],
             hint: p.hint || "",
           });
@@ -189,6 +189,16 @@ export function useWebSocket(sessionId: string | null) {
               createdAt: new Date().toISOString(),
             });
           }
+        } else if (msg.type === "agent.created") {
+          useAgentStore.getState().addAgent({
+            id: p.id,
+            name: p.name,
+            avatarUrl: "",
+            roleType: p.role_type,
+            adapterType: p.adapter_type,
+            capabilityTags: p.capability_tags || [],
+            isDeletable: p.is_deletable || false,
+          });
         }
       } catch (e) {
         console.error("WebSocket 消息解析失败:", e);
@@ -275,12 +285,13 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
-  const sendPlanAction = useCallback((action: string, taskId?: string, approachName?: string): boolean => {
+  const sendPlanAction = useCallback((action: string, taskId?: string, approachName?: string, assignments?: Record<string, unknown>[]): boolean => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
-      const payload: Record<string, string> = { action };
+      const payload: Record<string, unknown> = { action };
       if (taskId) payload.task_id = taskId;
       if (approachName) payload.approach_name = approachName;
+      if (assignments) payload.assignments = assignments;
       ws.send(JSON.stringify({ type: "plan.action", payload }));
       return true;
     }

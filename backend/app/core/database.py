@@ -1,11 +1,24 @@
 """Async SQLAlchemy engine and session for SQLite."""
 
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False)
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    connect_args={"timeout": 30},  # 等待最多 30 秒而非默认 5 秒
+)
+
+# 启用 WAL 模式：允许多读 + 单写并发，消除绝大多数 "database is locked"
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, _connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -18,6 +31,9 @@ async def init_db():
     """Create all tables on startup, seed default agents if empty."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # 确保 WAL 模式已启用（兜底，即使 connect 事件未触发）
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA busy_timeout=30000"))
 
     # Seed default agents if DB is empty
     from sqlalchemy import select, func

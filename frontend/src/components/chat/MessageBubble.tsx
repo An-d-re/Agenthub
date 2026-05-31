@@ -46,17 +46,29 @@ const roleIcon = (role: string) => {
   switch (role) {
     case "critic": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
     case "planner": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>;
-    case "coder": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
-    case "reviewer": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>;
+    case "coder": case "code": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
+    case "reviewer": case "verify": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>;
+    case "calculate": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="12" y2="15"/></svg>;
+    case "design": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>;
+    case "analyze": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><line x1="16" y1="2" x2="22" y2="8"/><line x1="12" y1="12" x2="17" y2="7"/></svg>;
+    case "write": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
+    case "data": return <svg className={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
     default: return null;
   }
 };
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; bubble: string }> = {
-  critic:   { label: "Critic",  color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
-  planner:  { label: "Planner", color: "text-[var(--accent)]",        bg: "bg-[var(--accent)]/8",     bubble: "bg-[var(--accent)]/5" },
-  coder:    { label: "Coder",   color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
-  reviewer: { label: "Reviewer",color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
+  critic:    { label: "Critic",   color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  planner:   { label: "Planner",  color: "text-[var(--accent)]",        bg: "bg-[var(--accent)]/8",     bubble: "bg-[var(--accent)]/5" },
+  coder:     { label: "Coder",    color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
+  code:      { label: "编码",     color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
+  reviewer:  { label: "Reviewer", color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
+  verify:    { label: "验证",     color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
+  calculate: { label: "计算",     color: "text-[#FF9500]",              bg: "bg-[#FF9500]/8",           bubble: "bg-[#FF9500]/5" },
+  design:    { label: "设计",     color: "text-[#007AFF]",              bg: "bg-[#007AFF]/8",           bubble: "bg-[#007AFF]/5" },
+  analyze:   { label: "分析",     color: "text-[#30B0C7]",              bg: "bg-[#30B0C7]/8",           bubble: "bg-[#30B0C7]/5" },
+  write:     { label: "写作",     color: "text-[#FF375F]",              bg: "bg-[#FF375F]/8",           bubble: "bg-[#FF375F]/5" },
+  data:      { label: "数据",     color: "text-[#5856D6]",              bg: "bg-[#5856D6]/8",           bubble: "bg-[#5856D6]/5" },
 };
 
 interface Props {

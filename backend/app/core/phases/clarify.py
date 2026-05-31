@@ -13,6 +13,29 @@ class ClarifyHandler(BasePhaseHandler):
 
     MAX_CLARIFY_ROUNDS = 2
 
+    # 简单确定性任务模式：不需要需求澄清，直接推进
+    TRIVIAL_PATTERNS = [
+        # 纯计算
+        r"^(计算|算|帮我算|请计算|帮我计算)\b",
+        r"^[0-9+\-*/().\s^%]+$",
+        r"^\d+\s*[+\-*/×÷xX]\s*\d+",
+        # 纯翻译
+        r"^(翻译|把|将).*(翻译|译)(成|为|一下)",
+        r"^translate\b",
+        # 纯事实查询
+        r"^(什么是|什么叫|定义|解释一下)\b",
+        r"^(what is|define|explain)\b",
+    ]
+
+    def _is_trivial_task(self, user_message: str) -> bool:
+        """检测是否为简单确定性任务，无需 clarify。"""
+        import re
+        stripped = user_message.strip()
+        for pattern in self.TRIVIAL_PATTERNS:
+            if re.search(pattern, stripped, re.IGNORECASE):
+                return True
+        return False
+
     async def execute(self, ctx: PhaseContext) -> str | None:
         # 停止检查
         if self._get_stop_event(ctx.plan.session_id) and self._get_stop_event(ctx.plan.session_id).is_set():
@@ -25,10 +48,32 @@ class ClarifyHandler(BasePhaseHandler):
         task_dag = ctx.plan.task_dag or {}
         clarify_round = task_dag.get("clarify_round", 0)
 
+        # 轮次 1+：必须等用户说 ok/确认 才推进（见 CONTEXT.md clarify 阶段规则）
+        if clarify_round > 0:
+            lower = ctx.user_message.strip().lower()
+            if lower in ("确认", "confirm", "ok", "好的", "可以", "执行", "开始", "go", "yes", "是"):
+                ctx.plan.phase = "comparison"
+                ctx.plan.task_dag = {}
+                await self._send_system_message(
+                    ctx.db, ctx.plan.session_id, "需求已明确，正在生成方案…",
+                    pending_events=ctx.pending_events,
+                )
+                return "comparison"
+
+        # 简单确定性任务：跳过 clarify，直接进入 comparison
+        if clarify_round == 0 and self._is_trivial_task(ctx.user_message):
+            ctx.plan.phase = "comparison"
+            ctx.plan.task_dag = {}
+            await self._send_system_message(
+                ctx.db, ctx.plan.session_id, "需求已明确（简单任务），正在生成方案…",
+                pending_events=ctx.pending_events,
+            )
+            return "comparison"
+
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
             await self._send_system_message(
-                ctx.db, ctx.plan.session_id, "需求澄清已完成。正在生成方案选项…",
+                ctx.db, ctx.plan.session_id, "需求澄清已完成（已达最大轮次）。正在生成方案选项…",
                 pending_events=ctx.pending_events,
             )
             return "comparison"
@@ -67,7 +112,14 @@ class ClarifyHandler(BasePhaseHandler):
         clarify_round += 1
         ctx.plan.task_dag = task_dag | {"clarify_round": clarify_round}
 
-        if clarify_round >= self.MAX_CLARIFY_ROUNDS or self._critic_has_signaled_done(content):
+        # round 0（首次对话）：Critic 判断需求已足够清楚 → 直接推进
+        if clarify_round == 1 and self._critic_has_signaled_done(content):
+            ctx.plan.phase = "comparison"
+            ctx.plan.task_dag = {}
+            return "comparison"
+
+        # round 1+：不检测信号词，必须等用户说"ok/确认"才会推进
+        if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}
             return "comparison"
@@ -76,7 +128,8 @@ class ClarifyHandler(BasePhaseHandler):
 
     def _critic_has_signaled_done(self, content: str) -> bool:
         signals = [
-            "不再需要澄清", "可以往下推进", "需求已经明确", "可以开始了", "准备好了",
+            "不再需要澄清", "可以往下推进", "需求已经明确", "需求已明确",
+            "可以推进到方案阶段", "可以开始了", "准备好了",
             "no further clarification", "ready to proceed", "requirements are clear",
             "ready to move on", "no more questions", "i am ready",
             "assumptions", "proceed with", "move forward",

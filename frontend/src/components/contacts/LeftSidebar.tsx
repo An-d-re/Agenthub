@@ -44,7 +44,7 @@ export function LeftSidebar() {
   const [deleteError, setDeleteError] = useState("");
 
   // Tab indicator positions (dynamic via refs)
-  const tabButtonRefs: Record<TabKey, React.RefObject<HTMLButtonElement | null>> = {
+  const tabButtonRefs: Record<TabKey, React.RefObject<HTMLButtonElement>> = {
     agents: useRef<HTMLButtonElement>(null),
     groups: useRef<HTMLButtonElement>(null),
     topics: useRef<HTMLButtonElement>(null),

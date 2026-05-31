@@ -16,6 +16,7 @@ from app.core.event_bus import event_bus
 from app.core.prompts import (
     CODER_TASK_PROMPT,
     REVIEWER_PROMPT_PREFIX,
+    VERIFIER_TASK_PROMPT,
 )
 from app.core.tracer import tracer
 from app.models.agent import Agent
@@ -115,14 +116,18 @@ class BasePhaseHandler:
     async def _get_agent_for_role(
         self, db: AsyncSession, session_id: str, role: str,
         mentions: Optional[list[str]] = None, task_context: Optional[dict] = None,
+        exclude_agent_ids: Optional[set[str]] = None,
     ) -> tuple[Optional[Agent], Optional[BaseAdapter]]:
         """根据角色选择合适的 Agent。
 
         优先级：@mention → 能力匹配 → 索引回退。
+        exclude_agent_ids: 排除已分配给其他角色的 Agent，确保不同角色用不同 Agent。
         """
         agent_ids = await self._get_session_agent_ids(db, session_id)
         if not agent_ids:
             return None, None
+
+        exclude = exclude_agent_ids or set()
 
         mentions = mentions or []
 
@@ -138,6 +143,8 @@ class BasePhaseHandler:
         for m_name, m_role in mention_to_role.items():
             if m_role == role:
                 for aid in agent_ids:
+                    if aid in exclude:
+                        continue
                     agent = await db.get(Agent, aid)
                     if agent and agent.name.lower() == m_name.lower():
                         return await self._get_agent_adapter(db, aid)
@@ -145,6 +152,8 @@ class BasePhaseHandler:
 
         for m in mentions:
             for aid in agent_ids:
+                if aid in exclude:
+                    continue
                 agent = await db.get(Agent, aid)
                 if agent and agent.name == m:
                     if role in ("critic", "planner"):
@@ -156,6 +165,8 @@ class BasePhaseHandler:
             if required_caps:
                 scored = []
                 for aid in agent_ids:
+                    if aid in exclude:
+                        continue
                     agent = await db.get(Agent, aid)
                     if not agent:
                         continue
@@ -167,25 +178,27 @@ class BasePhaseHandler:
                         scored.append((score, aid))
 
                 scored.sort(key=lambda x: -x[0])
-                # 按角色优先级选择：对于 coder/reviewer，优先能力匹配
-                # 对于 planner/critic，能力匹配 + 索引回退混合
                 if scored and role in ("coder", "reviewer"):
                     return await self._get_agent_adapter(db, scored[0][1])
                 elif scored and role in ("critic", "planner"):
-                    # planner 优先选能力匹配的，否则用第一个
                     for _, aid in scored:
                         ag, ad = await self._get_agent_adapter(db, aid)
                         if ag:
                             return ag, ad
 
         # ── 3. 索引回退 ──────────────────────────────────
+        # 过滤掉已排除的 ID，按原始顺序排列
+        available = [aid for aid in agent_ids if aid not in exclude]
+        if not available:
+            return None, None
+
         index_map = {
             "critic": 0, "planner": 0,
-            "coder": min(1, len(agent_ids) - 1),
-            "reviewer": min(2, len(agent_ids) - 1),
+            "coder": min(1, len(available) - 1),
+            "reviewer": min(2, len(available) - 1),
         }
         idx = index_map.get(role, 0)
-        return await self._get_agent_adapter(db, agent_ids[idx])
+        return await self._get_agent_adapter(db, available[idx])
 
     def _extract_required_capabilities(self, task_context: dict) -> set[str]:
         """从任务描述中提取所需的能力标签。"""
@@ -202,9 +215,74 @@ class BasePhaseHandler:
     async def _resolve_agent_id(
         self, db: AsyncSession, session_id: str, role: str,
         mentions: Optional[list[str]] = None, task_context: Optional[dict] = None,
+        exclude_agent_ids: Optional[set[str]] = None,
     ) -> Optional[str]:
-        agent, _ = await self._get_agent_for_role(db, session_id, role, mentions, task_context)
+        agent, _ = await self._get_agent_for_role(
+            db, session_id, role, mentions, task_context, exclude_agent_ids=exclude_agent_ids,
+        )
         return agent.id if agent else None
+
+    async def _auto_create_agent(
+        self, db: AsyncSession, session_id: str, role: str,
+        task_context: Optional[dict] = None,
+    ) -> tuple[Optional[Agent], Optional[BaseAdapter]]:
+        """为缺失的角色自动创建 Agent，复用群聊现有 Agent 的 adapter_type。"""
+        role_names = {
+            "coder": "Coder · 执行者",
+            "reviewer": "Reviewer · 验证者",
+            "planner": "Planner · 规划者",
+            "critic": "Critic · 分析者",
+        }
+        role_prompts = {
+            "coder": CODER_TASK_PROMPT,
+            "reviewer": VERIFIER_TASK_PROMPT,
+            "planner": "You are a project planner. Decompose requirements into executable tasks.",
+            "critic": "You are a technical advisor. Clarify requirements before implementation.",
+        }
+
+        name = role_names.get(role, f"Agent · {role}")
+        system_prompt = role_prompts.get(role, "")
+
+        # 复用群聊现有 Agent 的 adapter_type
+        agent_ids = await self._get_session_agent_ids(db, session_id)
+        adapter_type = "deepseek"
+        if agent_ids:
+            first_agent = await db.get(Agent, agent_ids[0])
+            if first_agent:
+                adapter_type = first_agent.adapter_type
+
+        capability_tags: list[str] = []
+        if task_context:
+            caps = self._extract_required_capabilities(task_context)
+            capability_tags = list(caps)
+
+        agent = Agent(
+            name=name,
+            role_type="custom",
+            adapter_type=adapter_type,
+            system_prompt=system_prompt,
+            capability_tags=capability_tags,
+            is_deletable=True,
+        )
+        db.add(agent)
+        await db.flush()
+
+        # 绑定到当前会话
+        session_agent = SessionAgent(session_id=session_id, agent_id=agent.id)
+        db.add(session_agent)
+        await db.flush()
+
+        # 初始化适配器（复用全局 API key）
+        adapter = create_adapter(agent.adapter_type)
+        await adapter.initialize({
+            "api_key": None,
+            "model": None,
+            "system_prompt": agent.system_prompt or None,
+            "deep_thinking": True,
+        })
+
+        logger.info("Auto-created agent %s (role=%s) for session %s", agent.id, role, session_id)
+        return agent, adapter
 
     # ── 消息持久化 ──────────────────────────────────────────
 
@@ -226,14 +304,14 @@ class BasePhaseHandler:
     async def _send_system_message(
         self, db: AsyncSession, session_id: str, content: str,
         agent_id: str = "", agent_role: str = "", pending_events: Optional[list[dict]] = None,
-        publish_now: bool = False,
+        publish_now: bool = False, message_type: str = "system",
     ) -> Message:
         msg = Message(
             session_id=session_id,
             agent_id=agent_id or None,
             role="system" if not agent_id else "agent",
             content=content,
-            message_type="system",
+            message_type=message_type,
         )
         db.add(msg)
         await db.flush()
@@ -279,10 +357,13 @@ class BasePhaseHandler:
         self, db: AsyncSession, session_id: str,
         adapter, agent, context: "AgentContext", message: str,
         pending_events: list[dict], agent_role: str,
+        stream: bool = True,
     ) -> str:
         """流式调用 Agent，每 token 检查停止信号，直接发布到 EventBus。
 
-        不发送占位消息——前端 appendStreamToken 在首次收到 token 时自动创建消息。
+        stream=False 时不推送 token 到前端也不添加 chat.message 到 pending_events
+        （用于 Planner 分解等内部调用，用户只需看结构化结果）。
+
         Returns 完整响应文本。若被停止则追加 "已停止生成" 标记。
         """
         from app.core.event_bus import event_bus
@@ -315,35 +396,39 @@ class BasePhaseHandler:
                 if isinstance(token, str):
                     full += token
                     seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.token",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "token": token, "sequence": seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.token",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "token": token, "sequence": seq},
+                        })
                 elif token.type == "reasoning":
                     reasoning += token.text
                     reason_seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.reasoning",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "reasoning_id": reasoning_id, "token": token.text, "sequence": reason_seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.reasoning",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "reasoning_id": reasoning_id, "token": token.text, "sequence": reason_seq},
+                        })
                 elif token.type == "content":
                     full += token.text
                     seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.token",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "token": token.text, "sequence": seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.token",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "token": token.text, "sequence": seq},
+                        })
         except Exception as e:
             logger.exception("Agent 流式调用失败: %s", e)
             full = f"[Error: {e}]"
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": msg_id, "token": full, "sequence": seq + 1},
-            })
+            if stream:
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": msg_id, "token": full, "sequence": seq + 1},
+                })
 
         if cancelled:
             full += "\n\n---\n⚠️ **已停止生成。**"
@@ -353,31 +438,32 @@ class BasePhaseHandler:
         await db.flush()
 
         # 发送完整消息到前端（覆盖流式占位），保留 reasoning 内容
-        payload: dict = {
-            "id": msg_id, "agent_id": agent.id, "agent_role": agent_role,
-            "role": "agent", "content": full, "message_type": "system",
-            "created_at": _utcnow().isoformat(),
-        }
-        if reasoning:
-            payload["reasoning"] = reasoning
-            payload["reasoning_id"] = reasoning_id
-        pending_events.append({
-            "type": "chat.message",
-            "session_id": session_id,
-            "payload": payload,
-        })
-
-        # 深度思考完成事件
-        if reasoning:
+        if stream:
+            payload: dict = {
+                "id": msg_id, "agent_id": agent.id, "agent_role": agent_role,
+                "role": "agent", "content": full, "message_type": "system",
+                "created_at": _utcnow().isoformat(),
+            }
+            if reasoning:
+                payload["reasoning"] = reasoning
+                payload["reasoning_id"] = reasoning_id
             pending_events.append({
-                "type": "chat.reasoning.complete",
+                "type": "chat.message",
                 "session_id": session_id,
-                "payload": {
-                    "message_id": msg_id,
-                    "reasoning_id": reasoning_id,
-                    "content": reasoning,
-                },
+                "payload": payload,
             })
+
+            # 深度思考完成事件
+            if reasoning:
+                pending_events.append({
+                    "type": "chat.reasoning.complete",
+                    "session_id": session_id,
+                    "payload": {
+                        "message_id": msg_id,
+                        "reasoning_id": reasoning_id,
+                        "content": reasoning,
+                    },
+                })
 
         return full
 

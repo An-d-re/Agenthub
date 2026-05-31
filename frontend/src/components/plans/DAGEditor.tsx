@@ -1,40 +1,116 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { DAGTask } from "@/stores/chatStore";
+import { API_BASE } from "@/lib/constants";
+import type { DAGTask, ModelOption } from "@/stores/chatStore";
 
 interface Props {
   tasks: DAGTask[];
-  onConfirm: () => void;
+  onConfirm: (assignments: Record<string, unknown>[]) => void;
   onDelete: (taskId: string) => void;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  coder: "Coder",
-  reviewer: "Reviewer",
-  planner: "Planner",
-  critic: "Critic",
-  architect: "Architect",
+const CAPABILITY_LABELS: Record<string, string> = {
+  calculate: "计算",
+  code: "编码",
+  verify: "验证",
+  design: "设计",
+  analyze: "分析",
+  write: "写作",
+  data: "数据",
 };
 
 export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
   const [checked, setChecked] = useState<Set<string>>(new Set(tasks.map((t) => t.id)));
   const [confirmed, setConfirmed] = useState(false);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+
+  // 每个任务的执行者配置
+  const [taskConfigs, setTaskConfigs] = useState<
+    Record<string, { mode: "existing" | "new"; agentId: string | null; adapterType: string; apiKey: string }>
+  >({});
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/models/available`)
+      .then((r) => r.json())
+      .then((data) => setModels(data.models || []))
+      .catch(() => setModels([]))
+      .finally(() => setModelsLoading(false));
+  }, []);
 
   useEffect(() => {
     setChecked((prev) => {
       const next = new Set<string>();
       tasks.forEach((t) => {
         if (prev.has(t.id)) next.add(t.id);
-      });
-      tasks.forEach((t) => {
-        if (!next.has(t.id)) next.add(t.id);
+        else next.add(t.id);
       });
       return next;
     });
-  }, [tasks]);
+
+    // 初始化任务配置
+    setTaskConfigs((prev) => {
+      const cfg: Record<string, typeof prev[string]> = {};
+      tasks.forEach((t) => {
+        const existing = prev[t.id];
+        if (existing) {
+          cfg[t.id] = existing;
+        } else {
+          cfg[t.id] = {
+            mode: t.executor_type,
+            agentId: t.agent_id,
+            adapterType: models[0]?.adapter_type || "deepseek",
+            apiKey: "",
+          };
+        }
+      });
+      return cfg;
+    });
+  }, [tasks, models]);
+
+  const toggle = (id: string) => {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const updateConfig = (
+    taskId: string,
+    patch: Partial<{ mode: "existing" | "new"; agentId: string | null; adapterType: string; apiKey: string }>
+  ) => {
+    setTaskConfigs((prev) => ({
+      ...prev,
+      [taskId]: { ...prev[taskId], ...patch },
+    }));
+  };
+
+  const [showKeyInputFor, setShowKeyInputFor] = useState<string | null>(null);
+
+  const handleConfirm = () => {
+    setConfirmed(true);
+    const assignments: Record<string, unknown>[] = [];
+    tasks.forEach((t) => {
+      const cfg = taskConfigs[t.id];
+      if (!cfg || !checked.has(t.id)) return;
+      if (cfg.mode === "existing") {
+        assignments.push({ task_id: t.id, agent_id: cfg.agentId, adapter_type: null, api_key: null });
+      } else {
+        assignments.push({
+          task_id: t.id,
+          agent_id: null,
+          adapter_type: cfg.adapterType,
+          api_key: cfg.apiKey || null,
+        });
+      }
+    });
+    onConfirm(assignments);
+  };
 
   if (tasks.length === 0) {
     return (
@@ -46,31 +122,20 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
     );
   }
 
-  const toggle = (id: string) => {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleConfirm = () => {
-    setConfirmed(true);
-    onConfirm();
-  };
-
   const activeTasks = tasks.filter((t) => checked.has(t.id));
 
   return (
     <div className="flex justify-center w-full my-3 animate-spring">
       <div className="w-full max-w-xl space-y-3">
         <div className="text-[11px] text-muted-foreground/60 dark:text-[var(--text-secondary)]/60 text-center uppercase tracking-widest font-medium">
-          任务计划 · 确认后执行
+          任务计划 · 指定执行者后确认
         </div>
 
         {tasks.map((task) => {
           const isChecked = checked.has(task.id);
+          const cfg = taskConfigs[task.id];
+          const needsNewAgent = task.executor_type === "new";
+
           return (
             <div
               key={task.id}
@@ -81,7 +146,8 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                   : "border-[var(--border)]/50 opacity-50"
               )}
             >
-              <div className="flex items-start gap-3">
+              {/* 任务标题行 */}
+              <div className="flex items-start gap-3 mb-3">
                 <button
                   onClick={() => toggle(task.id)}
                   disabled={confirmed}
@@ -104,7 +170,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                       {task.id}. {task.title}
                     </span>
                     <span className="text-[10px] font-medium text-[var(--accent)] bg-[var(--accent)]/10 px-1.5 py-0.5 rounded-full">
-                      {ROLE_LABELS[task.agent_role] || task.agent_role}
+                      {CAPABILITY_LABELS[task.required_capability] || task.required_capability}
                     </span>
                   </div>
                   {task.description && (
@@ -113,7 +179,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                     </p>
                   )}
                   {task.dependencies.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1.5">
+                    <div className="flex items-center gap-1 mt-1">
                       <span className="text-[10px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)]">依赖:</span>
                       {task.dependencies.map((dep) => (
                         <span key={dep} className="text-[10px] text-[var(--text-secondary)] bg-[var(--bg-secondary)] dark:bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded-full">
@@ -135,6 +201,79 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                   </button>
                 )}
               </div>
+
+              {/* 执行者选择行 */}
+              {!confirmed && cfg && (
+                <div className="ml-8 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-[var(--text-tertiary)] shrink-0">执行者</span>
+                    <select
+                      value={cfg.mode}
+                      onChange={(e) => updateConfig(task.id, { mode: e.target.value as "existing" | "new" })}
+                      className="text-[12px] bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-2 py-1 outline-none focus:border-[var(--accent)]"
+                    >
+                      {task.agent_id && (
+                        <option value="existing">
+                          {task.agent_name}（复用 · {task.match_reason}）
+                        </option>
+                      )}
+                      <option value="new">
+                        {needsNewAgent ? `新建 ${CAPABILITY_LABELS[task.required_capability] || ""}Agent` : "新建Agent"}
+                      </option>
+                    </select>
+                  </div>
+
+                  {/* 新建 Agent 时的模型选择 */}
+                  {cfg.mode === "new" && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-[var(--text-tertiary)] shrink-0">模型</span>
+                      {modelsLoading ? (
+                        <span className="text-[11px] text-[var(--text-tertiary)]">加载中…</span>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {models.map((m) => (
+                            <button
+                              key={m.adapter_type}
+                              onClick={() => {
+                                updateConfig(task.id, { adapterType: m.adapter_type, apiKey: "" });
+                                if (m.needs_key) {
+                                  setShowKeyInputFor(task.id);
+                                }
+                              }}
+                              className={cn(
+                                "text-[11px] px-2 py-1 rounded-full border transition-colors flex items-center gap-1",
+                                cfg.adapterType === m.adapter_type
+                                  ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                                  : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]/30"
+                              )}
+                            >
+                              <span>{m.icon}</span>
+                              <span>{m.name}</span>
+                              {m.available && <span className="text-[9px] text-[var(--success)]">✓</span>}
+                              {m.needs_key && <span className="text-[9px] text-[var(--warning)]">+Key</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* API Key 输入 */}
+                  {(showKeyInputFor === task.id || (cfg.mode === "new" && cfg.adapterType && models.find((m) => m.adapter_type === cfg.adapterType)?.needs_key)) && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-[var(--text-tertiary)] shrink-0">Key</span>
+                      <input
+                        type="password"
+                        value={cfg.apiKey}
+                        onChange={(e) => updateConfig(task.id, { apiKey: e.target.value })}
+                        placeholder="输入 API Key…"
+                        className="text-[12px] bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg px-2 py-1 outline-none focus:border-[var(--accent)] w-48"
+                      />
+                      <span className="text-[10px] text-[var(--text-tertiary)]">加密存储</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
