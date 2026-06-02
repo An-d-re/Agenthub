@@ -44,6 +44,7 @@ class Orchestrator:
 
     _locks: dict[str, asyncio.Lock] = {}
     _stop_events: dict[str, asyncio.Event] = {}
+    _running_tasks: dict[str, set[asyncio.Task]] = {}
     _init_lock = asyncio.Lock()
 
     def __init__(self, session_id: str):
@@ -58,6 +59,10 @@ class Orchestrator:
         if session_id not in cls._stop_events:
             cls._stop_events[session_id] = asyncio.Event()
         cls._stop_events[session_id].set()
+        # 取消该 session 所有正在运行的后台任务
+        tasks = cls._running_tasks.pop(session_id, set())
+        for t in tasks:
+            t.cancel()
 
     @classmethod
     def resume_session(cls, session_id: str) -> None:

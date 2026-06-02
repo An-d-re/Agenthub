@@ -155,6 +155,8 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
         async def _run_orch():
             try:
                 await Orchestrator(session_id).handle_message(content, mentions=mentions)
+            except asyncio.CancelledError:
+                logger.info("Orchestrator task CANCELLED session=%s", session_id)
             except Exception as e:
                 logger.exception("Orchestrator task CRASH session=%s: %s", session_id, e)
                 await event_bus.publish(session_id, {
@@ -168,7 +170,9 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     },
                 })
-        asyncio.create_task(_run_orch())
+        task = asyncio.create_task(_run_orch())
+        Orchestrator._running_tasks.setdefault(session_id, set()).add(task)
+        task.add_done_callback(lambda t: Orchestrator._running_tasks.get(session_id, set()).discard(t))
     else:
         asyncio.create_task(_trigger_agent(session_id, content))
 
