@@ -300,6 +300,19 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
+  const sendRegenerate = useCallback((messageId: string): boolean => {
+    const ws = wsRef.current;
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: "chat.regenerate",
+        payload: { message_id: messageId },
+      }));
+      return true;
+    }
+    console.warn("WebSocket 未连接，regenerate 发送失败");
+    return false;
+  }, []);
+
   const sendSessionControl = useCallback((action: string): boolean => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
@@ -313,5 +326,5 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
-  return { sendMessage, sendModify, sendPlanAction, sendSessionControl };
+  return { sendMessage, sendModify, sendRegenerate, sendPlanAction, sendSessionControl };
 }

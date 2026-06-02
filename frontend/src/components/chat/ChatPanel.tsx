@@ -17,7 +17,7 @@ export function ChatPanel() {
   const pendingSend = useChatStore((s) => s.pendingSend);
   const setPendingSend = useChatStore((s) => s.setPendingSend);
   const agents = useAgentStore((s) => s.agents);
-  const { sendMessage, sendModify, sendPlanAction, sendSessionControl } = useWebSocket(activeSessionId);
+  const { sendMessage, sendModify, sendRegenerate, sendPlanAction, sendSessionControl } = useWebSocket(activeSessionId);
 
   // 连接状态横幅（仅在有活跃会话时显示）
   useEffect(() => {
@@ -49,16 +49,7 @@ export function ChatPanel() {
   };
 
   const handleRegenerate = (agentMessageId: string) => {
-    if (!activeSessionId) return;
-    const msgs = useChatStore.getState().messages[activeSessionId] || [];
-    const agentIdx = msgs.findIndex(m => m.id === agentMessageId);
-    if (agentIdx <= 0) return;
-    for (let i = agentIdx - 1; i >= 0; i--) {
-      if (msgs[i].role === "user") {
-        sendMessage(msgs[i].content);
-        return;
-      }
-    }
+    sendRegenerate(agentMessageId);
   };
 
   // Handle pending send from PlanCard selection

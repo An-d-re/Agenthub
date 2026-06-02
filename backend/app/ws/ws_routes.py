@@ -54,6 +54,8 @@ async def websocket_endpoint(
 
                 if msg_type == "chat.send":
                     await _handle_chat_send(session_id, client_id, data.get("payload", {}))
+                elif msg_type == "chat.regenerate":
+                    await _handle_chat_regenerate(session_id, client_id, data.get("payload", {}))
                 elif msg_type == "chat.modify":
                     await _handle_chat_modify(session_id, client_id, data.get("payload", {}))
                 elif msg_type == "plan.action":
@@ -183,6 +185,76 @@ async def _trigger_agent(session_id: str, content: str):
         await run_agent_reply(session_id, content)
     except Exception as e:
         logging.getLogger(__name__).exception("_trigger_agent 异常: %s", e)
+
+
+async def _handle_chat_regenerate(session_id: str, client_id: str, payload: dict):
+    """Handle chat.regenerate — re-run agent for the given message's prompt."""
+    message_id = payload.get("message_id", "")
+    if not message_id:
+        return
+
+    async with async_session() as db:
+        # 找到要重新生成的 agent 消息
+        agent_msg = await db.get(Message, message_id)
+        if not agent_msg or agent_msg.role != "agent":
+            return
+
+        # 找到它之前的用户消息，获取原始 prompt
+        result = await db.execute(
+            select(Message).where(
+                Message.session_id == session_id,
+                Message.role == "user",
+                Message.created_at < agent_msg.created_at,
+            ).order_by(Message.created_at.desc()).limit(1)
+        )
+        user_msg = result.scalar_one_or_none()
+        if not user_msg:
+            return
+
+        # 删除旧的 agent 消息（广播删除通知？简单起见：标记为 system 类型隐藏）
+        agent_msg.message_type = "system"
+        agent_msg.content = "[已重新生成]"
+        session = await db.get(Session, session_id)
+        if session:
+            session.last_active_at = _utcnow()
+        await db.commit()
+
+        # 通知前端隐藏旧消息
+        await manager.broadcast_to_session(session_id, {
+            "type": "chat.message",
+            "session_id": session_id,
+            "payload": {
+                "id": agent_msg.id,
+                "role": "system",
+                "content": "[已重新生成]",
+                "message_type": "system",
+                "created_at": agent_msg.created_at.isoformat(),
+            },
+        })
+
+    # 根据会话类型重新触发
+    session_type = "single"
+    async with async_session() as db:
+        s = await db.get(Session, session_id)
+        if s:
+            session_type = s.type
+
+    if session_type == "group":
+        from app.core.orchestrator import Orchestrator
+        import re as _re
+        mentions = _re.findall(r'@([^\s@]+)', user_msg.content)
+        async def _re_run():
+            try:
+                await Orchestrator(session_id).handle_message(user_msg.content, mentions=mentions)
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.exception("Regenerate orchestrator CRASH session=%s: %s", session_id, e)
+        task = asyncio.create_task(_re_run())
+        Orchestrator._running_tasks.setdefault(session_id, set()).add(task)
+        task.add_done_callback(lambda t: Orchestrator._running_tasks.get(session_id, set()).discard(t))
+    else:
+        asyncio.create_task(_trigger_agent(session_id, user_msg.content))
 
 
 async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
