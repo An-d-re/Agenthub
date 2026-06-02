@@ -241,9 +241,10 @@ class ExecutingHandler(BasePhaseHandler):
 
         # 沙箱任务需要 workspace_dir
         if capability in SANDBOX_CAPABILITIES:
-            from app.core.sandbox.manager import SandboxManager
-            sm = SandboxManager(session_id)
-            context.workspace_dir = sm.workspace_path
+            from pathlib import Path
+            workspace_dir = Path("workspaces") / session_id
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+            context.workspace_dir = str(workspace_dir.resolve())
 
         # 停止检查
         stop_evt = self._get_stop_event(session_id)

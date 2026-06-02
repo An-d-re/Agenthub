@@ -135,16 +135,13 @@ class SandboxManager:
         }
 
     def cleanup(self) -> None:
-        """清理工作目录。"""
+        """清理工作目录。由 cleanup_old_workspaces() 定时调用，不依赖 GC。"""
         try:
             if self.workspace_dir.exists():
                 shutil.rmtree(self.workspace_dir)
                 logger.info("已清理工作目录: %s", self.workspace_dir)
         except Exception:
             logger.exception("清理工作目录失败: %s", self.workspace_dir)
-
-    def __del__(self):
-        self.cleanup()
 
 
 def cleanup_old_workspaces(max_age_hours: int = 24) -> None:
