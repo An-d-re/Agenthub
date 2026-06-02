@@ -261,6 +261,7 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
                     "task_id": None,
                     "file_path": art.file_path,
                     "language": art.language,
+                    "original_content": art.original_content or "",
                     "content_preview": (art.modified_content or art.original_content or "")[:500],
                 },
             })
