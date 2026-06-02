@@ -50,6 +50,11 @@ _deploy_dir = Path(__file__).resolve().parent / "public" / "deployments"
 _deploy_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/deployments", StaticFiles(directory=str(_deploy_dir), html=True), name="deployments")
 
+# Workspace 静态文件服务 —— Agent 生成的文件可通过 URL 直接访问
+_workspace_dir = Path(settings.workspace_root).resolve()
+_workspace_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/workspace", StaticFiles(directory=str(_workspace_dir), html=True), name="workspace")
+
 
 @app.get("/api/health")
 async def health():
