@@ -11,6 +11,7 @@ import httpx
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.core.prompts import CODER_TASK_PROMPT
 from app.services.adapters.base import (
     AgentContext, AgentResponse, BaseAdapter, StreamToken,
 )
@@ -154,10 +155,12 @@ class DeepSeekAdapter(BaseAdapter):
 
         system_prompt = context.config.get("system_prompt", "")
 
-        # 构建消息：system + history + task
+        # 构建消息：system（工具使用指南 + agent 自定义 prompt）+ history + task
         messages = []
+        full_system = CODER_TASK_PROMPT
         if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
+            full_system += f"\n\nAdditional instructions: {system_prompt}"
+        messages.append({"role": "system", "content": full_system})
 
         for msg in context.conversation_history:
             role = msg.get("role", "user")

@@ -159,8 +159,13 @@ class AnthropicAdapter(BaseAdapter):
         )
 
         system_prompt = context.config.get("system_prompt", "")
+        from app.core.prompts import CODER_TASK_PROMPT
 
         # 构建 Anthropic 消息（不含 system，alternating user/assistant）
+        full_system = CODER_TASK_PROMPT
+        if system_prompt:
+            full_system += f"\n\nAdditional instructions: {system_prompt}"
+
         messages = []
         for msg in context.conversation_history:
             role = msg.get("role", "user")
@@ -176,7 +181,7 @@ class AnthropicAdapter(BaseAdapter):
         # ── ReAct 工具调用循环 ──────────────────────────────
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             resp = await self._call_anthropic_with_retry(
-                system_prompt, messages, tools,
+                full_system, messages, tools,
             )
             if resp is None:
                 return AgentResponse(content="[错误：任务执行失败]")
@@ -254,7 +259,7 @@ class AnthropicAdapter(BaseAdapter):
                 "role": "user",
                 "content": "已达到最大工具调用次数。请基于上述执行结果给出最终总结。",
             })
-            resp = await self._call_anthropic_with_retry(system_prompt, messages, None)
+            resp = await self._call_anthropic_with_retry(full_system, messages, None)
             if resp:
                 for block in resp.content:
                     if block.type == "text":
