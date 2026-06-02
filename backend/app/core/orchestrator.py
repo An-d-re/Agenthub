@@ -206,7 +206,10 @@ class Orchestrator:
     # ── 外部 API（WS plan.action 入口）────────────────────────
 
     async def select_approach(self, approach_name: str) -> None:
-        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with Orchestrator._init_lock:
+            if self.session_id not in Orchestrator._locks:
+                Orchestrator._locks[self.session_id] = asyncio.Lock()
+            lock = Orchestrator._locks[self.session_id]
         async with lock:
             async with async_session() as db:
                 plan = await self._get_or_create_active_plan(db)
@@ -254,7 +257,10 @@ class Orchestrator:
             await self._flush_pending_events()
 
     async def confirm_plan(self, assignments: list[dict] | None = None) -> None:
-        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with Orchestrator._init_lock:
+            if self.session_id not in Orchestrator._locks:
+                Orchestrator._locks[self.session_id] = asyncio.Lock()
+            lock = Orchestrator._locks[self.session_id]
         async with lock:
             async with async_session() as db:
                 plan = await self._get_or_create_active_plan(db)
@@ -290,7 +296,10 @@ class Orchestrator:
             await self._flush_pending_events()
 
     async def delete_dag_task(self, dag_task_id: str) -> None:
-        lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+        async with Orchestrator._init_lock:
+            if self.session_id not in Orchestrator._locks:
+                Orchestrator._locks[self.session_id] = asyncio.Lock()
+            lock = Orchestrator._locks[self.session_id]
         async with lock:
             async with async_session() as db:
                 plan = await self._get_or_create_active_plan(db)

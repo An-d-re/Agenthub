@@ -183,10 +183,22 @@ class DeepSeekAdapter(BaseAdapter):
             choice = resp.choices[0]
             msg = choice.message
 
-            # 无工具调用 → 任务完成
+            # 无原生 tool_calls → 尝试解析 DSML 文本格式的工具调用（DeepSeek 特殊格式）
             if not msg.tool_calls:
-                final_content = msg.content or ""
-                break
+                parsed_calls, text_content = self._parse_dsml_tool_calls(msg.content or "")
+                if parsed_calls:
+                    # 构造假的 tool_calls 继续 ReAct 循环
+                    class FakeTC:
+                        def __init__(self, name, args):
+                            self.id = f"fake-{iteration}"
+                            self.function = type('F', (), {'name': name, 'arguments': json.dumps(args)})()
+                    msg.tool_calls = [FakeTC(tc['name'], tc['arguments']) for tc in parsed_calls]
+                    # 也追加纯文本部分
+                    if text_content.strip():
+                        messages.append({"role": "assistant", "content": text_content})
+                else:
+                    final_content = msg.content or ""
+                    break
 
             # 追加 assistant 消息（含 tool_calls）
             tc_dicts = []
@@ -281,6 +293,56 @@ class DeepSeekAdapter(BaseAdapter):
                 else:
                     raise
         return None
+
+    def _parse_dsml_tool_calls(self, content: str) -> tuple[list[dict], str]:
+        """解析 DeepSeek DSML 格式的工具调用（<function_calls> 块）。
+
+        返回 (tool_calls, clean_text)，其中 tool_calls 是 [{'name': ..., 'arguments': {...}}]。
+        """
+        import json as _json
+        import re as _re
+        calls = []
+        clean_text = content
+
+        # 匹配 <function_calls>...</function_calls> 或 <invoke>...</invoke>
+        fc_match = _re.search(r'<function_calls>(.*?)</function_calls>', content, _re.DOTALL)
+        if fc_match:
+            block = fc_match.group(1)
+        else:
+            # 也可能是直接 <invoke> 块
+            block = content
+
+        invoke_matches = _re.findall(
+            r'<invoke name="(\w+)">(.*?)</invoke>', block, _re.DOTALL
+        )
+        for tool_name, params_str in invoke_matches:
+            args = {}
+            param_matches = _re.findall(
+                r'<parameter name="(\w+)"[^>]*>(.*?)</parameter>', params_str, _re.DOTALL
+            )
+            for pname, pval in param_matches:
+                # 类型转换
+                if _re.search(r'string="true"', params_str.split(pname)[0].rsplit('<parameter', 1)[-1]):
+                    args[pname] = pval
+                elif _re.search(r'number="true"', params_str.split(pname)[0].rsplit('<parameter', 1)[-1]):
+                    try:
+                        args[pname] = float(pval) if '.' in pval else int(pval)
+                    except ValueError:
+                        args[pname] = pval
+                else:
+                    # 尝试 JSON 解析
+                    try:
+                        args[pname] = _json.loads(pval)
+                    except (_json.JSONDecodeError, ValueError):
+                        args[pname] = pval
+            calls.append({'name': tool_name, 'arguments': args})
+
+        # 移除 DSML 块，保留纯文本
+        if fc_match:
+            clean_text = content[:fc_match.start()] + content[fc_match.end():]
+            clean_text = clean_text.strip()
+
+        return calls, clean_text
 
     # ── 代码审查（Reviewer 角色）───────────────────────────────
 
