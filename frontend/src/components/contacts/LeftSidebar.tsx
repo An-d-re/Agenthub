@@ -44,7 +44,7 @@ export function LeftSidebar() {
   const [deleteError, setDeleteError] = useState("");
 
   // Tab indicator positions (dynamic via refs)
-  const tabButtonRefs: Record<TabKey, React.RefObject<HTMLButtonElement | null>> = {
+  const tabButtonRefs: Record<TabKey, React.RefObject<HTMLButtonElement>> = {
     agents: useRef<HTMLButtonElement>(null),
     groups: useRef<HTMLButtonElement>(null),
     topics: useRef<HTMLButtonElement>(null),
@@ -68,6 +68,7 @@ export function LeftSidebar() {
       setAgents((data as Record<string,unknown>[]).map(a => ({
         id: a.id as string, name: a.name as string, avatarUrl: (a.avatar_url as string) || "",
         roleType: a.role_type as string, adapterType: a.adapter_type as string,
+        systemPrompt: (a.system_prompt as string) || "",
         capabilityTags: (a.capability_tags as string[]) || [],
         isDeletable: a.is_deletable as boolean,
       })));
@@ -142,7 +143,7 @@ export function LeftSidebar() {
   const handleContextMenu = (e: React.MouseEvent, agentId: string) => {
     e.preventDefault();
     const agent = agents.find(a => a.id === agentId);
-    if (!agent?.isDeletable) return;
+    if (!agent) return;
     setContextMenu({ x: e.clientX, y: e.clientY, agentId });
   };
 
@@ -180,7 +181,7 @@ export function LeftSidebar() {
   const bottomBtn = (() => {
     switch (tab) {
       case "agents": return { label: "+ 新建助手", onClick: handleNewAgent, disabled: false };
-      case "groups": return { label: "+ 新建群聊", onClick: handleNewGroup, disabled: agents.length < 2 };
+      case "groups": return { label: "+ 新建群聊", onClick: handleNewGroup, disabled: false };
       case "topics": return selectedContactId
         ? { label: "+ 新建话题", onClick: handleNewTopic, disabled: false }
         : { label: "请先选择一个助手", onClick: () => { setTab("agents"); }, disabled: true };
@@ -205,9 +206,9 @@ export function LeftSidebar() {
   const searchFilter = (text: string) => !search || text.toLowerCase().includes(search.toLowerCase());
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-secondary)] dark:bg-[#1C1C1E]">
+    <div className="flex flex-col h-full bg-[var(--bg-secondary)]">
       {/* Tab bar — frosted glass */}
-      <div className="shrink-0 bg-[#F5F5F7]/80 dark:bg-[#1C1C1E]/80 backdrop-blur-xl border-b border-[#E5E5E7]/50 dark:border-[#38383A]/50">
+      <div className="shrink-0 bg-[var(--bg-secondary)]/80 backdrop-blur-xl border-b border-[var(--border)]/50">
         <div className="flex relative h-[48px]">
           {TABS.map(t => (
             <button
@@ -268,7 +269,7 @@ export function LeftSidebar() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{agent.name}</div>
-                        <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] bg-[var(--border)] dark:bg-[#3A3A3C] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
+                        <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[var(--text-secondary)] bg-[var(--border)] dark:bg-[var(--bg-tertiary)] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
                       </div>
                     </div>
                   );
@@ -293,7 +294,7 @@ export function LeftSidebar() {
                     <div key={s.id} onClick={() => setActiveSession(s.id)}
                       className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[#3A3A3C]">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[var(--bg-tertiary)]">
                         <span className="text-sm font-bold text-[var(--text-secondary)]">#</span>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -371,7 +372,7 @@ export function LeftSidebar() {
           className={cn(
             "w-full py-2.5 rounded-[12px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
             bottomBtn.disabled
-              ? "bg-[#C7C7CC] dark:bg-[#3A3A3C] text-white dark:text-[var(--text-tertiary)] cursor-not-allowed"
+              ? "bg-[var(--text-tertiary)] dark:bg-[var(--bg-tertiary)] text-white dark:text-[var(--text-tertiary)] cursor-not-allowed"
               : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
           )}
         >
@@ -411,7 +412,7 @@ export function LeftSidebar() {
               删除该助手将<strong className="text-[var(--danger)]">同时删除其所有话题</strong>，是否继续？
             </p>
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] dark:border-[#38383A] text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-[14px] font-medium text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors">
                 取消
               </button>
               <button onClick={confirmDeleteAgent} className="flex-1 py-2.5 rounded-xl bg-[var(--danger)] text-white text-[14px] font-medium hover:bg-[#E0352A] transition-colors">
@@ -424,9 +425,11 @@ export function LeftSidebar() {
 
       {/* Context menu */}
       {contextMenu && (
-        <div className="fixed z-50 bg-white dark:bg-[var(--bg-secondary)] rounded-xl shadow-lg border border-[var(--border)] dark:border-[#38383A] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C] transition-colors">编辑</button>
-          <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
+        <div className="fixed z-50 bg-[var(--bg-primary)] rounded-xl shadow-lg border border-[var(--border)] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors">编辑</button>
+          {agents.find(a => a.id === contextMenu.agentId)?.roleType !== "system" && (
+            <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
+          )}
         </div>
       )}
     </div>

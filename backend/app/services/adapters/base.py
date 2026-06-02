@@ -22,6 +22,7 @@ class AgentContext:
     config: dict = field(default_factory=dict)
     conversation_history: list[dict] = field(default_factory=list)
     current_task: Optional[dict] = None
+    workspace_dir: str = ""
 
 
 @dataclass

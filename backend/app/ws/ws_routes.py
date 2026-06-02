@@ -60,16 +60,20 @@ async def websocket_endpoint(
                     await _handle_plan_action(session_id, data.get("payload", {}))
                 elif msg_type == "session.control":
                     await _handle_session_control(session_id, data.get("payload", {}))
-                elif msg_type == "ping":
-                    manager.handle_pong(client_id)  # reset heartbeat on any ping/pong
-                    await manager.send_personal({"type": "pong", "session_id": session_id}, client_id)
+                elif msg_type in ("ping", "pong"):
+                    manager.handle_pong(client_id)
         except WebSocketDisconnect:
             pass
         except Exception as e:
             logging.getLogger(__name__).exception("ws_to_eventbus 异常: %s", e)
         finally:
-            manager.disconnect(client_id)
-            event_bus.unsubscribe(session_id)
+            await manager.disconnect(client_id)
+            # 无客户端连接此 session 时清理 EventBus 队列
+            remaining = any(
+                sid == session_id for sid in manager._client_sessions.values()
+            )
+            if not remaining:
+                event_bus.unsubscribe(session_id)
 
     async def eventbus_to_ws():
         """Read from session event queue, forward to WebSocket."""
@@ -216,7 +220,7 @@ async def _handle_chat_modify(session_id: str, client_id: str, payload: dict):
 
 
 async def _handle_plan_action(session_id: str, payload: dict):
-    """Handle plan.action — select approach / confirm plan / delete task from DAG."""
+    """Handle plan.action — select approach / confirm plan (with assignments) / delete task from DAG."""
     action = payload.get("action", "")
     if action == "select_approach":
         approach_name = payload.get("approach_name", "")
@@ -224,8 +228,9 @@ async def _handle_plan_action(session_id: str, payload: dict):
             from app.core.orchestrator import Orchestrator
             asyncio.create_task(Orchestrator(session_id).select_approach(approach_name))
     elif action == "confirm":
+        assignments = payload.get("assignments", [])
         from app.core.orchestrator import Orchestrator
-        asyncio.create_task(Orchestrator(session_id).confirm_plan())
+        asyncio.create_task(Orchestrator(session_id).confirm_plan(assignments))
     elif action == "delete_task":
         task_id = payload.get("task_id", "")
         if task_id:

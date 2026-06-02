@@ -13,18 +13,23 @@ interface Props {
 
 export function GroupEditor({ open, onClose }: Props) {
   const agents = useAgentStore(s => s.agents);
-  const sessions = useChatStore(s => s.sessions);
   const setActiveSession = useChatStore(s => s.setActiveSession);
   const [name, setName] = useState("群聊");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
+  const customAgents = agents.filter(a => a.roleType !== "system");
+  const systemAgentNames = agents
+    .filter(a => a.roleType === "system")
+    .map(a => a.name)
+    .join(" 和 ");
+
   useEffect(() => {
     if (open) {
-      setSelected(new Set(agents.slice(0, 3).map(a => a.id)));
+      setSelected(new Set(customAgents.slice(0, 3).map(a => a.id)));
       setSaving(false);
     }
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, agents]); // eslint-disable-line
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -36,7 +41,7 @@ export function GroupEditor({ open, onClose }: Props) {
 
   const save = async () => {
     const agentIds = Array.from(selected);
-    if (agentIds.length < 2 || !name.trim()) return;
+    if (!name.trim()) return;
     setSaving(true);
     try {
       const r = await fetch(`${API_BASE}/api/sessions`, {
@@ -45,7 +50,7 @@ export function GroupEditor({ open, onClose }: Props) {
       });
       if (r.ok) {
         const s = await r.json();
-        useChatStore.getState().setSessions([s, ...sessions]);
+        useChatStore.getState().setSessions([s, ...useChatStore.getState().sessions]);
         setActiveSession(s.id);
         onClose();
       }
@@ -58,13 +63,13 @@ export function GroupEditor({ open, onClose }: Props) {
     <div className="fixed inset-0 z-50 flex justify-end animate-fade-in" onClick={onClose}>
       <div className="absolute inset-0 bg-black/20" />
       <div
-        className="relative w-[360px] h-full bg-[var(--bg-primary)] dark:bg-[#1C1C1E] shadow-lg animate-spring flex flex-col"
+        className="relative w-[360px] h-full bg-[var(--bg-primary)] shadow-lg animate-spring flex flex-col"
         style={{ animation: "spring-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards" }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] dark:border-[#38383A]">
-          <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">新建群聊</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+          <h2 className="text-[17px] font-semibold">新建群聊</h2>
           <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
@@ -77,18 +82,23 @@ export function GroupEditor({ open, onClose }: Props) {
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              className="mt-2 w-full bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] dark:ring-[#38383A] focus:ring-[var(--accent)] transition-all"
+              className="mt-2 w-full bg-[var(--bg-secondary)] border-0 rounded-xl px-4 py-3 text-[15px] outline-none ring-1 ring-[var(--border)] focus:ring-[var(--accent)] transition-all"
               placeholder="输入群聊名称"
               maxLength={30}
             />
           </div>
 
           <div>
+            {systemAgentNames && (
+              <div className="mb-3 text-[12px] text-[var(--text-secondary)] bg-[var(--accent)]/8 rounded-lg px-3 py-2">
+                群聊将自动包含 {systemAgentNames}
+              </div>
+            )}
             <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[var(--text-secondary)] uppercase tracking-wider">
-              成员 · {selected.size}/{agents.length}
+              成员 · {selected.size}/{customAgents.length}
             </label>
             <div className="mt-2 space-y-1">
-              {agents.map(agent => {
+              {customAgents.map(agent => {
                 const checked = selected.has(agent.id);
                 return (
                   <button
@@ -121,18 +131,18 @@ export function GroupEditor({ open, onClose }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-[var(--border)] dark:border-[#38383A]">
+        <div className="p-4 border-t border-[var(--border)]">
           <button
             onClick={save}
-            disabled={saving || selected.size < 2 || !name.trim()}
+            disabled={saving || !name.trim()}
             className={cn(
               "w-full py-2.5 rounded-xl text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
-              selected.size < 2 || !name.trim()
+              !name.trim()
                 ? "bg-[var(--text-tertiary)] text-white cursor-not-allowed"
                 : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
             )}
           >
-            {saving ? "创建中..." : selected.size < 2 ? "至少选择 2 个成员" : "创建群聊"}
+            {saving ? "创建中..." : !name.trim() ? "请输入群聊名称" : "创建群聊"}
           </button>
         </div>
       </div>

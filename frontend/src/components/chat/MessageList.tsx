@@ -2,20 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
-import { DiffCard } from "@/components/cards/DiffCard";
+import { MessageBubble } from "./MessageBubble";
 import { PlanCard } from "@/components/cards/PlanCard";
-import { PreviewCard } from "@/components/cards/PreviewCard";
 import { DAGEditor } from "@/components/plans/DAGEditor";
 import { EMPTY_ARRAY, API_BASE } from "@/lib/constants";
-import { MessageBubble } from "./MessageBubble";
 
 interface Props {
   onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
-  onPlanAction?: (action: string, taskId?: string, approachName?: string) => boolean;
+  onPlanAction?: (action: string, taskId?: string, approachName?: string, assignments?: Record<string, unknown>[]) => boolean;
   onRegenerate?: (messageId: string) => void;
+  searchTerm?: string;
 }
 
-export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
+export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }: Props) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const messages = useChatStore((s) =>
     activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
@@ -26,14 +25,21 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   const confirmedPlan = useChatStore((s) =>
     activeSessionId ? s.confirmedPlans[activeSessionId] : undefined
   );
-  const artifacts = useChatStore((s) =>
-    activeSessionId ? (s.artifacts[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
-  );
   const clearConfirmedPlan = useChatStore((s) => s.clearConfirmedPlan);
   const removeDagTask = useChatStore((s) => s.removeDagTask);
   const [msgLoading, setMsgLoading] = useState(false);
   const [msgError, setMsgError] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+
+  // 追踪用户是否手动上滚
+  const handleScroll = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const threshold = 150; // 距底部 150px 内视为"在底部"
+    userScrolledUpRef.current = el.scrollHeight - el.scrollTop - el.clientHeight > threshold;
+  };
 
   useEffect(() => {
     if (!activeSessionId) return;
@@ -58,6 +64,8 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   }, [activeSessionId]);
 
   useEffect(() => {
+    // 用户已上滚查看历史时不强制滚到底部
+    if (userScrolledUpRef.current) return;
     // 流式接收时用 instant（避免抖动），消息稳定后用 smooth
     const last = messages[messages.length - 1];
     const isStreaming = last?.role === "agent" && (!last.content || last.reasoning !== undefined);
@@ -68,8 +76,8 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
     onPlanAction?.("select_approach", undefined, approach.name);
   };
 
-  const handleDagConfirm = () => {
-    onPlanAction?.("confirm");
+  const handleDagConfirm = (assignments: Record<string, unknown>[]) => {
+    onPlanAction?.("confirm", undefined, undefined, assignments);
     if (activeSessionId) clearConfirmedPlan(activeSessionId);
   };
 
@@ -93,8 +101,17 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
   const lastMsg = messages[messages.length - 1];
   const isThinking = lastMsg?.role === "user" && !showPlanCard && !showDagEditor;
 
+  // 过滤：卡片出现时隐藏临时进度提示
+  const displayMessages = (searchTerm
+    ? messages.filter(m => m.content.toLowerCase().includes(searchTerm.toLowerCase()))
+    : messages
+  ).filter(m => {
+    if (m.messageType === "temp_progress" && (showPlanCard || showDagEditor)) return false;
+    return true;
+  });
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-1">
+    <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-1">
       {/* Error state */}
       {msgError && !msgLoading && (
         <div className="text-center mt-12">
@@ -125,9 +142,12 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
           发送消息开始对话
         </div>
       )}
-      {messages.map((msg, i) => (
+      {displayMessages.map((msg, i) => (
         <MessageBubble key={msg.id || `msg-${msg.createdAt}`} message={msg} index={i} onModify={onModify} onRegenerate={onRegenerate} />
       ))}
+      {searchTerm && displayMessages.length === 0 && messages.length > 0 && (
+        <div className="text-center text-[var(--text-secondary)] mt-6 text-[13px]">无匹配消息</div>
+      )}
 
       {showPlanCard && (
         <PlanCard
@@ -142,14 +162,6 @@ export function MessageList({ onModify, onPlanAction, onRegenerate }: Props) {
           onConfirm={handleDagConfirm}
           onDelete={handleDagDelete}
         />
-      )}
-
-      {artifacts.map((a) =>
-        ["html", "svg", "css", "javascript", "js"].includes(a.language) ? (
-          <PreviewCard key={a.artifactId} artifact={a} />
-        ) : (
-          <DiffCard key={a.artifactId} artifact={a} />
-        )
       )}
 
       {/* Thinking indicator */}

@@ -127,12 +127,16 @@ async def upload_file(
 async def serve_file(session_id: str, file_name: str):
     """Serve uploaded files from workspaces."""
     from fastapi.responses import FileResponse
-    import os as _os
 
     workspace_root = settings.workspace_root or "workspaces"
-    file_path = _os.path.join(workspace_root, session_id, "uploads", file_name)
+    upload_dir = os.path.join(workspace_root, session_id, "uploads")
+    file_path = os.path.normpath(os.path.join(upload_dir, file_name))
 
-    if not _os.path.isfile(file_path):
+    # 防止路径遍历攻击
+    if not file_path.startswith(os.path.normpath(upload_dir) + os.sep) and file_path != os.path.normpath(upload_dir):
+        raise HTTPException(403, "路径访问被拒绝")
+
+    if not os.path.isfile(file_path):
         raise HTTPException(404, "文件不存在")
 
     # Determine MIME type

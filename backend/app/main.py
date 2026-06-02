@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.agents import router as agents_router
 from app.api.artifacts import router as artifacts_router
 from app.api.deployments import router as deployments_router
+from app.api.models import router as models_router
 from app.api.sessions import router as sessions_router
 from app.api.traces import router as traces_router
 from app.api.uploads import router as uploads_router
@@ -38,6 +39,7 @@ app.add_middleware(
 app.include_router(agents_router)
 app.include_router(artifacts_router)
 app.include_router(deployments_router)
+app.include_router(models_router)
 app.include_router(sessions_router)
 app.include_router(traces_router)
 app.include_router(uploads_router)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { useAgentStore } from "@/stores/agentStore";
 import { EMPTY_ARRAY } from "@/lib/constants";
@@ -19,11 +19,22 @@ const STATUS: Record<string, { label: string; dot: string; bar: string }> = {
   pending: { label: "等待中", dot: "bg-[#C7C7CC]", bar: "bg-[#C7C7CC]" },
 };
 
-function latencyStr(startedAt?: string, completedAt?: string): string {
-  if (!startedAt || !completedAt) return "";
-  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+function elapsedStr(startedAt?: string, completedAt?: string): string {
+  if (!startedAt) return "";
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  const ms = end - new Date(startedAt).getTime();
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function ElapsedTimer({ startedAt }: { startedAt: string }) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{elapsedStr(startedAt)}</>;
 }
 
 export function TaskPipeline() {
@@ -43,7 +54,7 @@ export function TaskPipeline() {
 
   if (connectionStatus === "connecting") {
     return (
-      <div className="flex flex-col h-full bg-white dark:bg-[#1C1C1E] px-4 py-4 space-y-3">
+      <div className="flex flex-col h-full bg-[var(--bg-primary)] px-4 py-4 space-y-3">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-2 w-full rounded-full" />
         {[1, 2, 3].map((i) => (
@@ -71,7 +82,7 @@ export function TaskPipeline() {
   const toggle = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   return (
-    <div className="flex flex-col h-full animate-fade-in bg-white dark:bg-[#1C1C1E]">
+    <div className="flex flex-col h-full animate-fade-in bg-[var(--bg-primary)]">
       {/* Header + Progress */}
       <div className="shrink-0 px-4 py-4 border-b border-[var(--border)] dark:border-[#38383A]/50">
         <div className="flex items-center justify-between mb-2">
@@ -115,13 +126,16 @@ export function TaskPipeline() {
           const c = STATUS[t.status] || STATUS.pending;
           const isOpen = expanded[t.taskId];
           const agentName = agents.find((a) => a.id === t.agentId)?.name || t.agentId?.slice(0, 8) || "";
-          const latency = latencyStr(t.startedAt, t.completedAt);
+          const isRunning = t.status === "running" || t.status === "reviewing";
+          const latency = t.completedAt
+            ? elapsedStr(t.startedAt, t.completedAt)
+            : (isRunning ? null : "");
 
           return (
             <div key={t.taskId} className="relative">
               {/* Connector line */}
               {i < tasks.length - 1 && (
-                <div className="absolute left-[15px] top-10 bottom-0 w-[2px] bg-[var(--border)] dark:bg-[#48484A]" />
+                <div className="absolute left-[15px] top-10 bottom-0 w-[2px] bg-[var(--border)] dark:bg-[var(--border)]" />
               )}
 
               {/* Card */}
@@ -131,7 +145,7 @@ export function TaskPipeline() {
                   className={cn(
                     "w-full text-left pl-7 pr-3 py-2.5 rounded-[12px] transition-all duration-150",
                     "hover:bg-[var(--bg-secondary)] dark:hover:bg-[#3A3A3C]",
-                    t.status === "running" && "bg-[#007AFF]/5 dark:bg-[#007AFF]/10",
+                    t.status === "running" && "bg-[var(--accent)]/5 dark:bg-[var(--accent)]/10",
                   )}
                 >
                   {/* Status dot */}
@@ -177,10 +191,10 @@ export function TaskPipeline() {
                         {agentName}
                       </span>
                     )}
-                    {latency && (
+                    {latency !== "" && (
                       <span className="text-[11px] text-[var(--text-tertiary)] flex items-center gap-1">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        {latency}
+                        {latency !== null ? latency : <ElapsedTimer startedAt={t.startedAt!} />}
                       </span>
                     )}
                     {(t.retryCount ?? 0) > 0 && (
@@ -194,7 +208,7 @@ export function TaskPipeline() {
 
                 {/* Expanded detail */}
                 {isOpen && (
-                  <div className="ml-7 mr-3 mb-2 px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] dark:bg-[#2C2C2E] animate-fade-in space-y-2">
+                  <div className="ml-7 mr-3 mb-2 px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] animate-fade-in space-y-2">
                     {t.description && (
                       <div>
                         <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase mb-1">描述</div>
@@ -212,10 +226,12 @@ export function TaskPipeline() {
                         <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase">状态</div>
                         <div className="text-[13px] font-medium" style={{ color: c.bar === "bg-[#C7C7CC]" ? "#8E8E93" : undefined }}>{c.label}</div>
                       </div>
-                      {latency && (
+                      {latency !== "" && (
                         <div>
                           <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase">耗时</div>
-                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{latency}</div>
+                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">
+                            {latency !== null ? latency : <ElapsedTimer startedAt={t.startedAt!} />}
+                          </div>
                         </div>
                       )}
                       <div>
@@ -232,7 +248,7 @@ export function TaskPipeline() {
                     {t.result && (
                       <div>
                         <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase mb-1">输出</div>
-                        <div className="text-[12px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] bg-white dark:bg-[#3A3A3C] rounded-[8px] px-3 py-2 font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap">{t.result.slice(0, 1000)}</div>
+                        <div className="text-[12px] text-[var(--text-primary)] bg-white dark:bg-[var(--bg-tertiary)] rounded-[8px] px-3 py-2 font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap">{t.result.slice(0, 1000)}</div>
                       </div>
                     )}
                   </div>

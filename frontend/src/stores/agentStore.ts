@@ -6,6 +6,7 @@ export interface AgentItem {
   avatarUrl: string;
   roleType: string;
   adapterType: string;
+  systemPrompt?: string;
   capabilityTags?: string[];
   isDeletable: boolean;
 }

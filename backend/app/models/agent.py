@@ -20,6 +20,8 @@ class Agent(Base):
     skills = Column(JSON, default=list)
     capability_tags = Column(JSON, default=list)
     is_deletable = Column(Boolean, default=True)
+    is_temp = Column(Boolean, default=False)  # 临时 Agent，Plan done 时销毁
+    encrypted_api_key = Column(Text, nullable=True)  # AES 加密的用户提供 API Key
 
     def __repr__(self):
         return f"<Agent {self.name} ({self.adapter_type})>"

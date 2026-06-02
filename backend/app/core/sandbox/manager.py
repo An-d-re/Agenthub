@@ -118,23 +118,20 @@ class SandboxManager:
 
     async def auto_fix_loop(
         self, code: str, language: str, file_path: str = "",
-        max_retries: int = 3,
     ) -> dict:
         """执行代码 → 读取错误 → 返回结果。调用方负责 LLM 修复。
 
-        Returns: {"ok": True/False, "output": ..., "error": ..., "attempts": N}
+        Returns: {"ok": True/False, "output": ..., "error": ...}
         """
         result = await self.execute_code(code, language, file_path)
 
         if result.get("ok"):
-            return {"ok": True, "output": result, "attempts": 1}
+            return {"ok": True, "output": result}
 
-        # 返回错误信息，由 Agent adapter 根据错误修复
         return {
             "ok": False,
             "error": result.get("stderr") or result.get("error") or "未知错误",
             "output": result,
-            "attempts": 1,
         }
 
     def cleanup(self) -> None:

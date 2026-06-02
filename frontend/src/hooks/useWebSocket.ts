@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { useChatStore } from "@/stores/chatStore";
+import { useAgentStore } from "@/stores/agentStore";
 import { WS_BASE, API_BASE } from "@/lib/constants";
 
 const RECONNECT_DELAYS = [1, 2, 4, 8, 16, 30, 30, 30];  // 重连间隔（秒），最多约 2 分钟
@@ -92,11 +93,25 @@ export function useWebSocket(sessionId: string | null) {
         const store = useChatStore.getState();
         const p = msg.payload || {};
 
+        // 响应服务器心跳 ping，防止 40s 后被静默断开
+        if (msg.type === "ping") {
+          ws.send(JSON.stringify({ type: "pong" }));
+          return;
+        }
+
         if (msg.type === "chat.message" && p.content !== undefined) {
           const createdAt = p.created_at || new Date().toISOString();
           // 追踪最后一条消息时间戳，用于断线补齐
           if (!lastMessageCreatedAtRef.current || createdAt > lastMessageCreatedAtRef.current) {
             lastMessageCreatedAtRef.current = createdAt;
+          }
+          // 收到服务器回传的用户消息时，移除本地临时消息避免重复
+          if (p.role === "user") {
+            const existing = store.messages[sessionId] || [];
+            const locals = existing.filter(m => m.id.startsWith("local-"));
+            if (locals.length > 0) {
+              store.setMessages(sessionId, existing.filter(m => !m.id.startsWith("local-")));
+            }
           }
           store.addMessage(sessionId, {
             id: p.id || crypto.randomUUID(),
@@ -126,7 +141,6 @@ export function useWebSocket(sessionId: string | null) {
           });
         } else if (msg.type === "plan.confirmed") {
           store.setConfirmedPlan(sessionId, {
-            messageId: p.message_id || "",
             tasks: p.tasks || [],
             hint: p.hint || "",
           });
@@ -153,6 +167,17 @@ export function useWebSocket(sessionId: string | null) {
             originalContent: p.original_content,
             modifiedContent: p.content_preview,
           });
+        } else if (msg.type === "trace.span") {
+          store.addTraceSpan(msg.session_id || sessionId, {
+            trace_id: p.trace_id,
+            span_id: p.span_id,
+            parent_span_id: p.parent_span_id,
+            operation_name: p.operation_name,
+            service_name: p.service_name,
+            duration_ms: p.duration_ms,
+            status: p.status,
+            tags: p.tags || {},
+          });
         } else if (msg.type === "session.control") {
           if (p.action === "stopped") {
             store.addMessage(sessionId, {
@@ -164,6 +189,17 @@ export function useWebSocket(sessionId: string | null) {
               createdAt: new Date().toISOString(),
             });
           }
+        } else if (msg.type === "agent.created") {
+          useAgentStore.getState().addAgent({
+            id: p.id,
+            name: p.name,
+            avatarUrl: "",
+            roleType: p.role_type,
+            adapterType: p.adapter_type,
+            capabilityTags: p.capability_tags || [],
+            isDeletable: p.is_deletable || false,
+          });
+          useChatStore.getState().addSessionAgent(msg.session_id || sessionId, p.id);
         }
       } catch (e) {
         console.error("WebSocket 消息解析失败:", e);
@@ -187,7 +223,7 @@ export function useWebSocket(sessionId: string | null) {
     ws.onerror = () => {
       ws.close();
     };
-  }, [sessionId]);
+  }, [sessionId, fetchMissedMessages]);
 
   useEffect(() => {
     reconnectCountRef.current = 0;
@@ -209,16 +245,32 @@ export function useWebSocket(sessionId: string | null) {
   }, [connect]);
 
   const sendMessage = useCallback((content: string, quoteMessageId?: string): boolean => {
+    const currentSid = sessionIdRef.current;
+    if (!currentSid) return false;
+
     const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: "chat.send",
-        payload: { content, quote_message_id: quoteMessageId || "" },
-      }));
-      return true;
+    if (ws?.readyState !== WebSocket.OPEN) {
+      console.warn("WebSocket 未连接，消息发送失败");
+      return false;
     }
-    console.warn("WebSocket 未连接，消息发送失败");
-    return false;
+
+    // 本地先添加用户消息（临时 ID），确保消息立即显示
+    const tempId = "local-" + crypto.randomUUID();
+    useChatStore.getState().addMessage(currentSid, {
+      id: tempId,
+      sessionId: currentSid,
+      role: "user",
+      content,
+      messageType: "text",
+      parentId: quoteMessageId || undefined,
+      createdAt: new Date().toISOString(),
+    });
+
+    ws.send(JSON.stringify({
+      type: "chat.send",
+      payload: { content, quote_message_id: quoteMessageId || "" },
+    }));
+    return true;
   }, []);
 
   const sendModify = useCallback((messageId: string, startLine: number, endLine: number, instruction: string): boolean => {
@@ -234,12 +286,13 @@ export function useWebSocket(sessionId: string | null) {
     return false;
   }, []);
 
-  const sendPlanAction = useCallback((action: string, taskId?: string, approachName?: string): boolean => {
+  const sendPlanAction = useCallback((action: string, taskId?: string, approachName?: string, assignments?: Record<string, unknown>[]): boolean => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
-      const payload: Record<string, string> = { action };
+      const payload: Record<string, unknown> = { action };
       if (taskId) payload.task_id = taskId;
       if (approachName) payload.approach_name = approachName;
+      if (assignments) payload.assignments = assignments;
       ws.send(JSON.stringify({ type: "plan.action", payload }));
       return true;
     }

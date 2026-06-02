@@ -125,56 +125,159 @@ class DeepSeekAdapter(BaseAdapter):
                 else:
                     raise
 
-    # ── 任务执行（Coder 角色）──────────────────────────────────
+    # ── 任务执行（Coder 角色，含工具调用循环）─────────────────
+
+    MAX_TOOL_ITERATIONS = 10
 
     async def execute_task(self, context: AgentContext, task: dict) -> AgentResponse:
-        """执行任务 —— 将任务信息作为 system prompt 的一部分注入。"""
+        """执行任务 —— ReAct 循环：LLM 决策 → 工具调用 → 沙箱执行 → 结果回传。"""
+        import json
+        from app.core.sandbox.tools import get_tools_schema
+        from app.core.sandbox.manager import SandboxManager
+
+        # 构建 OpenAI function calling 格式的工具列表
+        raw_tools = get_tools_schema()
+        tools = [{"type": "function", "function": t} for t in raw_tools]
+
+        # 创建沙箱管理器
+        sm: SandboxManager | None = None
+        workspace_dir = context.workspace_dir
+        if workspace_dir:
+            sm = SandboxManager(context.session_id)
+
         task_title = task.get("title", "")
         task_desc = task.get("description", "")
-
-        task_context = (
+        task_prompt = (
             f"当前任务：{task_title}\n任务描述：{task_desc}\n\n"
-            "请完成上述任务。输出完整可用的代码，标注文件路径。"
+            "请完成上述任务。使用工具写代码、运行测试，验证通过后给出最终总结。"
         )
 
         system_prompt = context.config.get("system_prompt", "")
-        full_system = f"{system_prompt}\n\n{task_context}" if system_prompt else task_context
 
-        # 加入对话历史
-        history_msgs = []
+        # 构建消息：system + history + task
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
         for msg in context.conversation_history:
             role = msg.get("role", "user")
             if role == "agent":
                 role = "assistant"
-            history_msgs.append({"role": role, "content": msg.get("content", "")})
+            messages.append({"role": role, "content": msg.get("content", "")})
 
-        # 重建：system + history + task
-        final_messages = []
-        if full_system:
-            final_messages.append({"role": "system", "content": full_system})
-        final_messages.extend(history_msgs[-20:])  # 最近 20 条
-        final_messages.append({"role": "user", "content": task_context})
+        messages.append({"role": "user", "content": task_prompt})
 
+        all_artifacts: list[dict] = []
+        all_tool_calls: list[dict] = []
+        final_content = ""
+
+        # ── ReAct 工具调用循环 ──────────────────────────────
+        for iteration in range(self.MAX_TOOL_ITERATIONS):
+            resp = await self._call_with_retry(messages, tools)
+            if resp is None:
+                return AgentResponse(content="[错误：任务执行失败]")
+
+            choice = resp.choices[0]
+            msg = choice.message
+
+            # 无工具调用 → 任务完成
+            if not msg.tool_calls:
+                final_content = msg.content or ""
+                break
+
+            # 追加 assistant 消息（含 tool_calls）
+            tc_dicts = []
+            for tc in msg.tool_calls:
+                tc_dicts.append({
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                })
+            messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": tc_dicts,
+            })
+
+            # 逐个执行工具
+            for tc in msg.tool_calls:
+                tool_name = tc.function.name
+                try:
+                    tool_args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError:
+                    tool_args = {}
+
+                all_tool_calls.append({"name": tool_name, "arguments": tool_args})
+
+                if sm:
+                    result = await sm.execute_tool(tool_name, tool_args)
+                else:
+                    result = {"ok": False, "error": "沙箱不可用"}
+
+                # 追踪 write_file 产出的文件
+                if tool_name == "write_file" and result.get("ok"):
+                    path = tool_args.get("path", "")
+                    ext = path.rsplit(".", 1)[-1] if "." in path else ""
+                    lang_map = {
+                        "py": "python", "js": "javascript", "ts": "typescript",
+                        "html": "html", "css": "css", "json": "json", "md": "markdown",
+                    }
+                    all_artifacts.append({
+                        "file_path": path,
+                        "language": lang_map.get(ext, ext),
+                        "content": tool_args.get("content", ""),
+                    })
+
+                # 工具结果回传
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+
+            logger.info(
+                "execute_task 迭代 %d/%d: %d 个工具调用",
+                iteration + 1, self.MAX_TOOL_ITERATIONS, len(msg.tool_calls),
+            )
+
+        # 超过最大迭代次数 → 要求最终总结
+        if not final_content:
+            messages.append({
+                "role": "user",
+                "content": "已达到最大工具调用次数。请基于上述执行结果给出最终总结。",
+            })
+            resp = await self._call_with_retry(messages, None)
+            if resp:
+                final_content = resp.choices[0].message.content or ""
+
+        return AgentResponse(
+            content=final_content,
+            artifacts=all_artifacts,
+            tool_calls=all_tool_calls,
+        )
+
+    async def _call_with_retry(self, messages: list[dict], tools: list[dict] | None):
+        """带重试的 API 调用。"""
         for attempt, delay in enumerate(RETRY_DELAYS):
             try:
-                resp = await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=final_messages,
-                    temperature=0.5,
-                    max_tokens=8192,
-                )
-                return AgentResponse(content=resp.choices[0].message.content or "")
-
+                kwargs = {
+                    "model": self._model,
+                    "messages": messages,
+                    "temperature": 0.5,
+                    "max_tokens": 8192,
+                }
+                if tools:
+                    kwargs["tools"] = tools
+                    kwargs["tool_choice"] = "auto"
+                return await self._client.chat.completions.create(**kwargs)
             except Exception as e:
                 logger.warning("DeepSeek execute_task 第 %d 次尝试失败: %s", attempt + 1, e)
-                if self._is_retryable(e):
-                    if attempt < len(RETRY_DELAYS) - 1:
-                        import asyncio
-                        await asyncio.sleep(delay)
+                if self._is_retryable(e) and attempt < len(RETRY_DELAYS) - 1:
+                    import asyncio
+                    await asyncio.sleep(delay)
                 else:
                     raise
-
-        return AgentResponse(content="[错误：任务执行失败]")
+        return None
 
     # ── 代码审查（Reviewer 角色）───────────────────────────────
 
@@ -215,6 +318,14 @@ class DeepSeekAdapter(BaseAdapter):
                     raise
 
         return AgentResponse(content='{"passed": false, "feedback": "审查失败", "suggested_changes": ""}')
+
+    async def stop(self) -> None:
+        if self._client:
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            self._client = None
 
     async def get_capabilities(self) -> dict:
         return {

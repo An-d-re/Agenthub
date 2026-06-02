@@ -6,6 +6,7 @@ export function useTheme() {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const stored = localStorage.getItem("agenthub_theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const isDark = stored ? stored === "dark" : prefersDark;

@@ -96,7 +96,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
       if (res.ok) {
         const data = await res.json();
         if (editAgent) {
-          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
+          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, systemPrompt: data.system_prompt, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
         } else {
           addAgent({ id: data.id, name: data.name, avatarUrl: data.avatar_url || "", roleType: data.role_type, adapterType: data.adapter_type, capabilityTags: data.capability_tags || [], isDeletable: data.is_deletable });
         }
@@ -168,7 +168,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
                   placeholder="例如：SQL 优化专家"
                   className={cn(
                     "w-full px-4 py-3 rounded-[12px] bg-[var(--bg-secondary)] border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] transition-colors focus:bg-white dark:focus:bg-[var(--bg-secondary)] focus:ring-2",
-                    name.length >= 20 ? "ring-2 ring-[#FF3B30]" : "focus:ring-[var(--accent)]/20"
+                    name.length >= 20 ? "ring-2 ring-[var(--danger)]" : "focus:ring-[var(--accent)]/20"
                   )} />
                 <div className="flex justify-between mt-1">
                   {name.length >= 20 && <span className="text-[11px] text-[var(--danger)]">名称不能超过 20 个字符</span>}

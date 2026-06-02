@@ -13,13 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import async_session
 from app.core.event_bus import event_bus
-from app.core.prompts import (
-    CODER_TASK_PROMPT,
-    REVIEWER_PROMPT_PREFIX,
-)
-from app.core.tracer import tracer
 from app.models.agent import Agent
-from app.models.artifact import Artifact
 from app.models.message import Message
 from app.models.plan import Plan
 from app.models.session import SessionAgent
@@ -115,14 +109,18 @@ class BasePhaseHandler:
     async def _get_agent_for_role(
         self, db: AsyncSession, session_id: str, role: str,
         mentions: Optional[list[str]] = None, task_context: Optional[dict] = None,
+        exclude_agent_ids: Optional[set[str]] = None,
     ) -> tuple[Optional[Agent], Optional[BaseAdapter]]:
         """根据角色选择合适的 Agent。
 
         优先级：@mention → 能力匹配 → 索引回退。
+        exclude_agent_ids: 排除已分配给其他角色的 Agent，确保不同角色用不同 Agent。
         """
         agent_ids = await self._get_session_agent_ids(db, session_id)
         if not agent_ids:
             return None, None
+
+        exclude = exclude_agent_ids or set()
 
         mentions = mentions or []
 
@@ -138,13 +136,17 @@ class BasePhaseHandler:
         for m_name, m_role in mention_to_role.items():
             if m_role == role:
                 for aid in agent_ids:
+                    if aid in exclude:
+                        continue
                     agent = await db.get(Agent, aid)
-                    if agent and (agent.name == m_name or agent.name.lower() in m_name.lower()):
+                    if agent and agent.name.lower() == m_name.lower():
                         return await self._get_agent_adapter(db, aid)
                 break
 
         for m in mentions:
             for aid in agent_ids:
+                if aid in exclude:
+                    continue
                 agent = await db.get(Agent, aid)
                 if agent and agent.name == m:
                     if role in ("critic", "planner"):
@@ -156,6 +158,8 @@ class BasePhaseHandler:
             if required_caps:
                 scored = []
                 for aid in agent_ids:
+                    if aid in exclude:
+                        continue
                     agent = await db.get(Agent, aid)
                     if not agent:
                         continue
@@ -167,25 +171,27 @@ class BasePhaseHandler:
                         scored.append((score, aid))
 
                 scored.sort(key=lambda x: -x[0])
-                # 按角色优先级选择：对于 coder/reviewer，优先能力匹配
-                # 对于 planner/critic，能力匹配 + 索引回退混合
                 if scored and role in ("coder", "reviewer"):
                     return await self._get_agent_adapter(db, scored[0][1])
                 elif scored and role in ("critic", "planner"):
-                    # planner 优先选能力匹配的，否则用第一个
                     for _, aid in scored:
                         ag, ad = await self._get_agent_adapter(db, aid)
                         if ag:
                             return ag, ad
 
         # ── 3. 索引回退 ──────────────────────────────────
+        # 过滤掉已排除的 ID，按原始顺序排列
+        available = [aid for aid in agent_ids if aid not in exclude]
+        if not available:
+            return None, None
+
         index_map = {
             "critic": 0, "planner": 0,
-            "coder": min(1, len(agent_ids) - 1),
-            "reviewer": min(2, len(agent_ids) - 1),
+            "coder": min(1, len(available) - 1),
+            "reviewer": min(2, len(available) - 1),
         }
         idx = index_map.get(role, 0)
-        return await self._get_agent_adapter(db, agent_ids[idx])
+        return await self._get_agent_adapter(db, available[idx])
 
     def _extract_required_capabilities(self, task_context: dict) -> set[str]:
         """从任务描述中提取所需的能力标签。"""
@@ -202,9 +208,83 @@ class BasePhaseHandler:
     async def _resolve_agent_id(
         self, db: AsyncSession, session_id: str, role: str,
         mentions: Optional[list[str]] = None, task_context: Optional[dict] = None,
+        exclude_agent_ids: Optional[set[str]] = None,
     ) -> Optional[str]:
-        agent, _ = await self._get_agent_for_role(db, session_id, role, mentions, task_context)
+        agent, _ = await self._get_agent_for_role(
+            db, session_id, role, mentions, task_context, exclude_agent_ids=exclude_agent_ids,
+        )
         return agent.id if agent else None
+
+    async def _auto_create_agent(
+        self, db: AsyncSession, session_id: str, role: str,
+        task_context: Optional[dict] = None,
+    ) -> tuple[Optional[Agent], Optional[BaseAdapter]]:
+        """为缺失的角色自动创建 Agent，复用群聊现有 Agent 的 adapter_type。"""
+        role_names = {
+            "coder": "Coder · 执行者",
+            "reviewer": "Reviewer · 验证者",
+            "planner": "Planner · 规划者",
+            "critic": "Critic · 分析者",
+        }
+        role_prompts = {
+            "coder": (
+                "You are a capable task executor. Execute the assigned task precisely. "
+                "Use sandbox tools (write_file, run_command, read_file, install_deps, list_files) "
+                "to complete the work. Test before finishing. Deliver results as a natural language summary."
+            ),
+            "reviewer": (
+                "You are an independent verifier. Re-do the work independently, "
+                "compare results, and state whether they match. "
+                "Output natural text. Do NOT use JSON."
+            ),
+            "planner": "You are a project planner. Decompose requirements into executable tasks.",
+            "critic": "You are a technical advisor. Clarify requirements before implementation.",
+        }
+
+        name = role_names.get(role, f"Agent · {role}")
+        system_prompt = role_prompts.get(role, "")
+
+        # 复用群聊现有 Agent 的 adapter_type
+        agent_ids = await self._get_session_agent_ids(db, session_id)
+        adapter_type = "deepseek"
+        if agent_ids:
+            first_agent = await db.get(Agent, agent_ids[0])
+            if first_agent:
+                adapter_type = first_agent.adapter_type
+
+        capability_tags: list[str] = []
+        if task_context:
+            caps = self._extract_required_capabilities(task_context)
+            capability_tags = list(caps)
+
+        agent = Agent(
+            name=name,
+            role_type="custom",
+            adapter_type=adapter_type,
+            system_prompt=system_prompt,
+            capability_tags=capability_tags,
+            is_deletable=True,
+            is_temp=True,
+        )
+        db.add(agent)
+        await db.flush()
+
+        # 绑定到当前会话
+        session_agent = SessionAgent(session_id=session_id, agent_id=agent.id)
+        db.add(session_agent)
+        await db.flush()
+
+        # 初始化适配器（复用全局 API key）
+        adapter = create_adapter(agent.adapter_type)
+        await adapter.initialize({
+            "api_key": None,
+            "model": None,
+            "system_prompt": agent.system_prompt or None,
+            "deep_thinking": True,
+        })
+
+        logger.info("Auto-created agent %s (role=%s) for session %s", agent.id, role, session_id)
+        return agent, adapter
 
     # ── 消息持久化 ──────────────────────────────────────────
 
@@ -226,14 +306,14 @@ class BasePhaseHandler:
     async def _send_system_message(
         self, db: AsyncSession, session_id: str, content: str,
         agent_id: str = "", agent_role: str = "", pending_events: Optional[list[dict]] = None,
-        publish_now: bool = False,
+        publish_now: bool = False, message_type: str = "system",
     ) -> Message:
         msg = Message(
             session_id=session_id,
             agent_id=agent_id or None,
             role="system" if not agent_id else "agent",
             content=content,
-            message_type="system",
+            message_type=message_type,
         )
         db.add(msg)
         await db.flush()
@@ -279,10 +359,13 @@ class BasePhaseHandler:
         self, db: AsyncSession, session_id: str,
         adapter, agent, context: "AgentContext", message: str,
         pending_events: list[dict], agent_role: str,
+        stream: bool = True,
     ) -> str:
         """流式调用 Agent，每 token 检查停止信号，直接发布到 EventBus。
 
-        不发送占位消息——前端 appendStreamToken 在首次收到 token 时自动创建消息。
+        stream=False 时不推送 token 到前端也不添加 chat.message 到 pending_events
+        （用于 Planner 分解等内部调用，用户只需看结构化结果）。
+
         Returns 完整响应文本。若被停止则追加 "已停止生成" 标记。
         """
         from app.core.event_bus import event_bus
@@ -315,35 +398,39 @@ class BasePhaseHandler:
                 if isinstance(token, str):
                     full += token
                     seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.token",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "token": token, "sequence": seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.token",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "token": token, "sequence": seq},
+                        })
                 elif token.type == "reasoning":
                     reasoning += token.text
                     reason_seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.reasoning",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "reasoning_id": reasoning_id, "token": token.text, "sequence": reason_seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.reasoning",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "reasoning_id": reasoning_id, "token": token.text, "sequence": reason_seq},
+                        })
                 elif token.type == "content":
                     full += token.text
                     seq += 1
-                    await event_bus.publish(session_id, {
-                        "type": "chat.stream.token",
-                        "session_id": session_id,
-                        "payload": {"message_id": msg_id, "token": token.text, "sequence": seq},
-                    })
+                    if stream:
+                        await event_bus.publish(session_id, {
+                            "type": "chat.stream.token",
+                            "session_id": session_id,
+                            "payload": {"message_id": msg_id, "token": token.text, "sequence": seq},
+                        })
         except Exception as e:
             logger.exception("Agent 流式调用失败: %s", e)
             full = f"[Error: {e}]"
-            await event_bus.publish(session_id, {
-                "type": "chat.stream.token",
-                "session_id": session_id,
-                "payload": {"message_id": msg_id, "token": full, "sequence": seq + 1},
-            })
+            if stream:
+                await event_bus.publish(session_id, {
+                    "type": "chat.stream.token",
+                    "session_id": session_id,
+                    "payload": {"message_id": msg_id, "token": full, "sequence": seq + 1},
+                })
 
         if cancelled:
             full += "\n\n---\n⚠️ **已停止生成。**"
@@ -353,31 +440,32 @@ class BasePhaseHandler:
         await db.flush()
 
         # 发送完整消息到前端（覆盖流式占位），保留 reasoning 内容
-        payload: dict = {
-            "id": msg_id, "agent_id": agent.id, "agent_role": agent_role,
-            "role": "agent", "content": full, "message_type": "system",
-            "created_at": _utcnow().isoformat(),
-        }
-        if reasoning:
-            payload["reasoning"] = reasoning
-            payload["reasoning_id"] = reasoning_id
-        pending_events.append({
-            "type": "chat.message",
-            "session_id": session_id,
-            "payload": payload,
-        })
-
-        # 深度思考完成事件
-        if reasoning:
+        if stream:
+            payload: dict = {
+                "id": msg_id, "agent_id": agent.id, "agent_role": agent_role,
+                "role": "agent", "content": full, "message_type": "system",
+                "created_at": _utcnow().isoformat(),
+            }
+            if reasoning:
+                payload["reasoning"] = reasoning
+                payload["reasoning_id"] = reasoning_id
             pending_events.append({
-                "type": "chat.reasoning.complete",
+                "type": "chat.message",
                 "session_id": session_id,
-                "payload": {
-                    "message_id": msg_id,
-                    "reasoning_id": reasoning_id,
-                    "content": reasoning,
-                },
+                "payload": payload,
             })
+
+            # 深度思考完成事件
+            if reasoning:
+                pending_events.append({
+                    "type": "chat.reasoning.complete",
+                    "session_id": session_id,
+                    "payload": {
+                        "message_id": msg_id,
+                        "reasoning_id": reasoning_id,
+                        "content": reasoning,
+                    },
+                })
 
         return full
 
@@ -466,189 +554,6 @@ class BasePhaseHandler:
         except json.JSONDecodeError:
             pass
         return None
-
-    # ── Artifact 提取 ───────────────────────────────────────
-
-    def _guess_file_path(self, full_content: str, code: str, language: str) -> str:
-        path_match = re.search(
-            r'(?:File|文件|path):\s*([^\s\n]+)', full_content, re.IGNORECASE
-        )
-        if path_match:
-            raw = path_match.group(1)
-            raw = re.sub(r'\.\.+', '', raw)
-            raw = raw.lstrip('/\\~')
-            return raw
-        ext_map = {
-            "python": "output.py", "py": "output.py",
-            "typescript": "output.ts", "ts": "output.ts",
-            "tsx": "component.tsx", "jsx": "component.jsx",
-            "javascript": "output.js", "js": "output.js",
-            "html": "index.html", "css": "styles.css",
-            "json": "config.json", "yaml": "config.yaml",
-            "sql": "query.sql", "rust": "main.rs",
-            "go": "main.go", "java": "Main.java",
-        }
-        return ext_map.get(language.lower(), f"output.{language or 'txt'}")
-
-    async def _extract_artifacts(
-        self, db: AsyncSession, session_id: str, task: Task, content: str,
-        pending_events: list[dict],
-    ) -> list[dict]:
-        artifacts: list[dict] = []
-        code_blocks = re.finditer(r'`{3}(\w*)\s*\n(.*?)`{3}', content, re.DOTALL)
-        for match in code_blocks:
-            language = match.group(1) or "text"
-            code = match.group(2).strip()
-            if len(code) < 10:
-                continue
-            file_path = self._guess_file_path(content, code, language)
-            original = ""
-            prev_result = await db.execute(
-                select(Artifact).where(
-                    Artifact.session_id == session_id,
-                    Artifact.file_path == file_path,
-                    Artifact.id != task.id,
-                ).order_by(Artifact.created_at.desc()).limit(1)
-            )
-            prev_artifact = prev_result.scalar_one_or_none()
-            if prev_artifact and prev_artifact.modified_content:
-                original = prev_artifact.modified_content
-
-            artifact = Artifact(
-                task_id=task.id, session_id=session_id,
-                file_path=file_path, original_content=original,
-                modified_content=code, language=language, artifact_type="code",
-            )
-            db.add(artifact)
-            await db.flush()
-            artifacts.append({
-                "id": artifact.id, "file_path": artifact.file_path,
-                "language": artifact.language,
-                "original_content": original, "modified_content": code,
-            })
-            pending_events.append({
-                "type": "artifact.created",
-                "session_id": session_id,
-                "payload": {
-                    "artifact_id": artifact.id, "task_id": task.id,
-                    "file_path": file_path, "language": language,
-                    "original_content": original, "content_preview": code[:200],
-                },
-            })
-
-        if not artifacts and len(content) > 50:
-            artifact = Artifact(
-                task_id=task.id, session_id=session_id,
-                file_path=f"output/task-{task.title[:30]}.md",
-                original_content="", modified_content=content,
-                language="markdown", artifact_type="code",
-            )
-            db.add(artifact)
-            await db.flush()
-            artifacts.append({
-                "id": artifact.id, "file_path": artifact.file_path,
-                "language": "markdown", "modified_content": content,
-            })
-            pending_events.append({
-                "type": "artifact.created",
-                "session_id": session_id,
-                "payload": {
-                    "artifact_id": artifact.id, "task_id": task.id,
-                    "file_path": artifact.file_path, "language": "markdown",
-                    "content_preview": content[:200],
-                },
-            })
-        return artifacts
-
-    # ── Reviewer ────────────────────────────────────────────
-
-    async def _review_task_output(
-        self, db: AsyncSession, session_id: str, task: Task, output: str,
-        pending_events: list[dict], mentions: Optional[list[str]] = None,
-    ) -> bool:
-        """双层审查：静态规则（零 token）→ LLM Reviewer。返回 True 表示通过。"""
-        # Layer 1: 静态规则检查
-        from app.core.static_reviewer import review_static
-        static_result = review_static(output)
-        if not static_result.passed:
-            task.status = "retrying"
-            task.retry_count += 1
-            task.error_message = "; ".join(static_result.errors)
-            await db.flush()
-            await self._publish_task_update(session_id, task, "retrying", pending_events)
-            await self._send_system_message(
-                db, session_id,
-                f"🔍 静态检查未通过：{'; '.join(static_result.errors)}\n"
-                + (f"⚠️ 警告：{'; '.join(static_result.warnings)}" if static_result.warnings else ""),
-                agent_role="reviewer", pending_events=pending_events,
-            )
-            return False
-
-        # Layer 2: LLM Reviewer
-        reviewer_agent, reviewer_adapter = await self._get_agent_for_role(
-            db, session_id, "reviewer", mentions,
-            task_context={"title": task.title, "description": task.description or ""},
-        )
-        if not reviewer_agent or not reviewer_adapter:
-            # 静态检查通过 + 无 LLM reviewer = 通过
-            if static_result.warnings:
-                await self._send_system_message(
-                    db, session_id,
-                    f"⚠️ 审查警告（仅静态检查）：{'; '.join(static_result.warnings)}",
-                    agent_role="reviewer", pending_events=pending_events,
-                )
-            return True
-
-        try:
-            review_ctx = AgentContext(
-                session_id=session_id,
-                agent_role=AgentRole.REVIEWER,
-                current_task={"id": task.id, "title": task.title, "description": task.description or ""},
-                config={"system_prompt": REVIEWER_PROMPT_PREFIX},
-            )
-            review_input = (
-                f"Task: {task.title}\n"
-                f"Description: {task.description or 'N/A'}\n\n"
-                f"Static checks passed. Code output to review:\n\n{output[:4000]}"
-            )
-            review_resp = await reviewer_adapter.send_message(review_ctx, review_input)
-            review_data = self._extract_json(review_resp.content)
-
-            if review_data and not review_data.get("passed", True):
-                if task.retry_count >= self.MAX_TASK_RETRIES + 1:
-                    task.status = "dispute"
-                    task.error_message = review_data.get("feedback", "Reviewer 连续不通过")
-                    await db.flush()
-                    await self._publish_task_update(session_id, task, "dispute", pending_events)
-                    await self._send_system_message(
-                        db, session_id,
-                        f"❌ 任务「{task.title}」Reviewer 审查 {task.retry_count + 1} 次仍未通过。\n"
-                        f"反馈：{review_data.get('feedback', '')[:200]}\n输入「重试」重新执行。",
-                        agent_id=reviewer_agent.id, agent_role="reviewer",
-                        pending_events=pending_events,
-                    )
-                    return False
-                task.status = "retrying"
-                task.retry_count += 1
-                task.error_message = review_data.get("feedback", "")
-                await db.flush()
-                await self._publish_task_update(session_id, task, "retrying", pending_events)
-                await self._send_system_message(
-                    db, session_id,
-                    f"🔍 Reviewer: {review_data.get('feedback', '审查未通过')}\n"
-                    f"📝 建议: {review_data.get('suggested_changes', '')[:300]}",
-                    agent_id=reviewer_agent.id, agent_role="reviewer",
-                    pending_events=pending_events,
-                )
-                return False
-        except Exception as e:
-            logger.warning("Reviewer 调用失败，跳过审查: %s", e)
-        finally:
-            try:
-                await reviewer_adapter.stop()
-            except Exception:
-                pass
-        return True
 
     # ── 任务执行辅助 ────────────────────────────────────────
 

@@ -75,8 +75,25 @@ export interface DAGTask {
   title: string;
   description: string;
   dependencies: string[];
-  agent_role: string;
+  required_capability: string;  // calculate | code | verify | design | analyze | write | data
+  executor_type: "existing" | "new";  // 复用现有 Agent 还是新建
+  agent_id: string | null;
+  agent_name: string | null;
+  match_reason: string;
+  // 用户选择（DAG 确认时）
+  selected_agent_id?: string | null;   // 用户选中的现有 Agent ID
+  selected_adapter_type?: string;      // 用户为"新建"选的模型
+  selected_api_key?: string;           // 用户输入的 API Key（仅当模型未配置时）
   db_id: string;
+}
+
+export interface ModelOption {
+  adapter_type: string;
+  name: string;
+  icon: string;
+  description: string;
+  available: boolean;   // 已配置 API Key
+  needs_key: boolean;   // 需要用户提供 Key
 }
 
 export interface PlanData {
@@ -86,7 +103,6 @@ export interface PlanData {
 }
 
 export interface ConfirmedPlan {
-  messageId: string;
   tasks: DAGTask[];
   hint: string;
 }
@@ -115,7 +131,7 @@ interface ChatState {
   selectedContactId: string | null;
   setSessions: (sessions: SessionItem[]) => void;
   setSelectedContact: (id: string | null) => void;
-  setActiveSession: (id: string) => void;
+  setActiveSession: (id: string | null) => void;
   addMessage: (sessionId: string, msg: ChatMessage) => void;
   appendStreamToken: (sessionId: string, msgId: string, token: string) => void;
   appendReasoningToken: (sessionId: string, msgId: string, reasoningId: string, token: string) => void;
@@ -133,7 +149,13 @@ interface ChatState {
   setPendingSend: (msg: string | null) => void;
   replyTarget: ReplyTarget | null;
   setReplyTarget: (target: ReplyTarget | null) => void;
+  traceSpans: Record<string, TraceSpan[]>;
+  addTraceSpan: (sessionId: string, span: TraceSpan) => void;
   _finalizedIds: Set<string>;  // 已完成的消息 ID，防止流式 token 覆盖
+  sessionAgentIds: Record<string, string[]>;
+  initSessionAgents: (sessionId: string, ids: string[]) => void;
+  addSessionAgent: (sessionId: string, agentId: string) => void;
+  removeSessionAgent: (sessionId: string, agentId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -149,6 +171,7 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedContactId: null,
   pendingSend: null,
   replyTarget: null,
+  traceSpans: {},
 
   setSessions: (sessions) => set({ sessions }),
   setSelectedContact: (id) => set({ selectedContactId: id }),
@@ -209,7 +232,7 @@ export const useChatStore = create<ChatState>((set) => ({
       // 找到对应的消息（可能由 reasoning token 首次创建，或已存在）
       const prev = state.messages[sessionId] || [];
       // 优先通过主消息 ID 找
-      let existingIdx = prev.findIndex((m) => m.id === msgId);
+      const existingIdx = prev.findIndex((m) => m.id === msgId);
       if (existingIdx < 0) {
         // 如果主消息还没创建（reasoning 比 content 先到），创建占位
         return {
@@ -318,4 +341,41 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setPendingSend: (msg) => set({ pendingSend: msg }),
   setReplyTarget: (target) => set({ replyTarget: target }),
+
+  sessionAgentIds: {},
+  initSessionAgents: (sessionId, ids) =>
+    set((state) => ({
+      sessionAgentIds: { ...state.sessionAgentIds, [sessionId]: ids },
+    })),
+  addSessionAgent: (sessionId, agentId) =>
+    set((state) => {
+      const existing = state.sessionAgentIds[sessionId] || [];
+      if (existing.includes(agentId)) return state;
+      return {
+        sessionAgentIds: {
+          ...state.sessionAgentIds,
+          [sessionId]: [...existing, agentId],
+        },
+      };
+    }),
+  removeSessionAgent: (sessionId, agentId) =>
+    set((state) => ({
+      sessionAgentIds: {
+        ...state.sessionAgentIds,
+        [sessionId]: (state.sessionAgentIds[sessionId] || []).filter((id) => id !== agentId),
+      },
+    })),
+
+  addTraceSpan: (sessionId, span) =>
+    set((state) => ({
+      traceSpans: {
+        ...state.traceSpans,
+        [sessionId]: [...(state.traceSpans[sessionId] || []), span],
+      },
+    })),
 }));
+
+// Expose store for E2E testing
+if (typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__CHAT_STORE__ = useChatStore;
+}

@@ -2,7 +2,10 @@
 
 from datetime import datetime, timezone
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -57,6 +60,9 @@ async def create_session(body: SessionCreate, db: AsyncSession = Depends(get_db)
 
     for agent_id in body.agent_ids:
         db.add(SessionAgent(session_id=session.id, agent_id=agent_id))
+
+    if body.type == "group":
+        await _ensure_system_agents(db, session.id, body.agent_ids)
 
     await db.commit()
     await db.refresh(session)
@@ -182,6 +188,9 @@ async def add_agent_to_session(session_id: str, agent_id: str, db: AsyncSession 
 
 @router.delete("/{session_id}/agents/{agent_id}")
 async def remove_agent_from_session(session_id: str, agent_id: str, db: AsyncSession = Depends(get_db)):
+    agent = await db.get(Agent, agent_id)
+    if agent and agent.role_type == "system":
+        raise HTTPException(403, "系统 Agent 不可从群聊中移除")
     result = await db.execute(
         select(SessionAgent).where(
             SessionAgent.session_id == session_id,
@@ -192,6 +201,126 @@ async def remove_agent_from_session(session_id: str, agent_id: str, db: AsyncSes
         await db.delete(sa)
         await db.commit()
     return {"ok": True}
+
+
+@router.get("/{session_id}/export", response_class=PlainTextResponse)
+async def export_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    """导出会话完整对话为 Markdown，保存到 test-cases/ 并返回下载。"""
+    import os as _os
+    session = await db.get(Session, session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+
+    result = await db.execute(
+        select(Message)
+        .where(Message.session_id == session_id)
+        .order_by(Message.created_at)
+    )
+    messages = result.scalars().all()
+
+    # 构建 agent_id → Agent 对象映射
+    agent_map: dict[str, Agent] = {}
+    all_ids: set[str] = set()
+    for m in messages:
+        if m.agent_id:
+            all_ids.add(m.agent_id)
+    for aid in all_ids:
+        agent = await db.get(Agent, aid)
+        if agent:
+            agent_map[aid] = agent
+
+    # 生成 Markdown
+    date_str = (session.created_at or _utcnow()).strftime("%Y-%m-%d")
+    safe_title = "".join(c for c in session.title if c.isalnum() or c in " _-").strip()[:50] or "未命名"
+
+    lines = [
+        f"# {session.title}",
+        f"- 日期：{date_str}",
+        f"- 类型：{session.type}",
+        f"- 会话 ID：{session.id}",
+        f"- 消息总数：{len(messages)}",
+        "",
+        "## 会话 Agent 清单",
+        "",
+    ]
+    for aid, agent in agent_map.items():
+        tags = ", ".join(agent.capability_tags or [])
+        temp_mark = " 🔧临时" if agent.is_deletable else ""
+        lines.append(f"- **{agent.name}** (id=`{aid}`) role=`{agent.role_type}` adapter=`{agent.adapter_type}` tags=`{tags}`{temp_mark}")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    for m in messages:
+        if m.message_type == "temp_progress":
+            continue
+        role_label = _role_label(m, agent_map)
+        debug_parts = [f"role={m.role}"]
+        if m.agent_id:
+            debug_parts.append(f"agent_id=`{m.agent_id}`")
+        if m.message_type and m.message_type != "text":
+            debug_parts.append(f"msg_type={m.message_type}")
+        lines.append(f"### {role_label}")
+        lines.append(f"<!-- {' | '.join(debug_parts)} -->")
+        lines.append("")
+        lines.append(m.content)
+        lines.append("")
+
+    content = "\n".join(lines)
+    filename = f"{date_str}-{safe_title}.md"
+
+    # 保存到项目根目录 test-cases/
+    backend_dir = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    test_cases_dir = _os.path.join(_os.path.dirname(backend_dir), "test-cases")
+    _os.makedirs(test_cases_dir, exist_ok=True)
+    filepath = _os.path.join(test_cases_dir, filename)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # HTTP 头仅支持 latin-1，非 ASCII 字符滤除后若为空则用回退名
+    ascii_safe = "".join(c for c in safe_title if c.isascii()).strip(" -")
+    ascii_filename = f"{date_str}-{ascii_safe}.md" if ascii_safe else f"{date_str}-export.md"
+    return PlainTextResponse(
+        content,
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_filename}";'
+                f" filename*=UTF-8''{quote(filename)}"
+            ),
+            "X-Saved-Path": quote(filepath, safe="/:\\"),
+        },
+    )
+
+
+async def _ensure_system_agents(db, session_id: str, existing_ids: list[str]) -> None:
+    """确保群聊中有 Critic 和 Planner 系统 Agent。已存在的跳过。"""
+    result = await db.execute(
+        select(Agent).where(Agent.role_type == "system")
+    )
+    for agent in result.scalars().all():
+        if agent.id in existing_ids:
+            continue
+        already = await db.execute(
+            select(SessionAgent).where(
+                SessionAgent.session_id == session_id,
+                SessionAgent.agent_id == agent.id,
+            )
+        )
+        if already.scalar_one_or_none():
+            continue
+        db.add(SessionAgent(session_id=session_id, agent_id=agent.id))
+
+
+def _role_label(msg: Message, agent_map: dict[str, "Agent"]) -> str:
+    """生成含调试信息的消息角色标签。"""
+    if msg.role == "user":
+        return "👤 用户"
+    if msg.role == "system":
+        return "⚙️ 系统"
+    agent = agent_map.get(msg.agent_id or "")
+    agent_name = agent.name if agent else f"Unknown({msg.agent_id[:8] if msg.agent_id else 'no-id'})"
+    return f"🤖 {agent_name}"
 
 
 async def _build_session_response(session_id: str, db: AsyncSession) -> SessionResponse:

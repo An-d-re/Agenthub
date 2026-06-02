@@ -23,16 +23,26 @@ class ConnectionManager:
     # ── lifecycle ──────────────────────────────────────────
 
     async def connect(self, client_id: str, session_id: str, websocket: WebSocket):
+        # 防止竞态：同 client_id 旧连接先清理
+        if client_id in self._connections:
+            await self.disconnect(client_id)
         await websocket.accept()
         self._connections[client_id] = websocket
         self._client_sessions[client_id] = session_id
         self._heartbeat_tasks[client_id] = asyncio.create_task(self._heartbeat_loop(client_id))
 
-    def disconnect(self, client_id: str):
-        self._connections.pop(client_id, None)
+    async def disconnect(self, client_id: str):
+        ws = self._connections.pop(client_id, None)
         self._client_sessions.pop(client_id, None)
         if task := self._heartbeat_tasks.pop(client_id, None):
             task.cancel()
+        self._pong_events.pop(client_id, None)
+        # 真正关闭 WebSocket，防止客户端误以为还连着（僵尸连接）
+        if ws:
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
     @property
     def active_clients(self) -> dict[str, WebSocket]:
@@ -46,7 +56,7 @@ class ConnectionManager:
             try:
                 await ws.send_text(json.dumps(message, default=str))
             except Exception:
-                self.disconnect(client_id)
+                await self.disconnect(client_id)
 
     async def broadcast_to_session(self, session_id: str, message: dict[str, Any], exclude: set[str] | None = None):
         exclude = exclude or set()
@@ -69,7 +79,7 @@ class ConnectionManager:
                 self._pong_events[client_id] = pong_event
                 await asyncio.wait_for(pong_event.wait(), timeout=self.HEARTBEAT_TIMEOUT)
             except (asyncio.TimeoutError, WebSocketDisconnect, Exception):
-                self.disconnect(client_id)
+                await self.disconnect(client_id)
                 return
             finally:
                 self._pong_events.pop(client_id, None)
