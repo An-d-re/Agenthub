@@ -93,11 +93,11 @@ async def match_task_to_agent(
     if not agent_ids:
         return MatchResult(matched=False, reason="群聊中没有可用的 Agent")
 
-    for aid in agent_ids:
-        agent = await db.get(Agent, aid)
-        if not agent:
-            continue
+    # 批量加载 Agent，避免 N+1
+    agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
+    agents = list(agents_result.scalars().all())
 
+    for agent in agents:
         sem_ok = _semantic_match(agent, capability)
         tag_ok = _capability_tag_match(agent, capability)
 
@@ -188,10 +188,17 @@ async def destroy_temp_agents(db: AsyncSession, session_id: str) -> int:
         select(SessionAgent).where(SessionAgent.session_id == session_id)
     )
     session_agents = result.scalars().all()
+    agent_ids = [sa.agent_id for sa in session_agents]
+
+    # 批量加载 Agent，避免 N+1
+    agent_map: dict[str, Agent] = {}
+    if agent_ids:
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
+        agent_map = {a.id: a for a in agents_result.scalars().all()}
 
     destroyed = 0
     for sa in session_agents:
-        agent = await db.get(Agent, sa.agent_id)
+        agent = agent_map.get(sa.agent_id)
         if agent and agent.is_temp:
             await db.delete(sa)
             await db.delete(agent)

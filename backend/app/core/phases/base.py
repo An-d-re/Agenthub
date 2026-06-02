@@ -120,6 +120,10 @@ class BasePhaseHandler:
         if not agent_ids:
             return None, None
 
+        # 批量加载 Agent，避免后续 N+1 查询
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
+        agent_map: dict[str, Agent] = {a.id: a for a in agents_result.scalars().all()}
+
         exclude = exclude_agent_ids or set()
 
         mentions = mentions or []
@@ -138,7 +142,7 @@ class BasePhaseHandler:
                 for aid in agent_ids:
                     if aid in exclude:
                         continue
-                    agent = await db.get(Agent, aid)
+                    agent = agent_map.get(aid)
                     if agent and agent.name.lower() == m_name.lower():
                         return await self._get_agent_adapter(db, aid)
                 break
@@ -147,7 +151,7 @@ class BasePhaseHandler:
             for aid in agent_ids:
                 if aid in exclude:
                     continue
-                agent = await db.get(Agent, aid)
+                agent = agent_map.get(aid)
                 if agent and agent.name == m:
                     if role in ("critic", "planner"):
                         return await self._get_agent_adapter(db, aid)
@@ -160,7 +164,7 @@ class BasePhaseHandler:
                 for aid in agent_ids:
                     if aid in exclude:
                         continue
-                    agent = await db.get(Agent, aid)
+                    agent = agent_map.get(aid)
                     if not agent:
                         continue
                     agent_caps = set(

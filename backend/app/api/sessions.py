@@ -218,16 +218,12 @@ async def export_session(session_id: str, db: AsyncSession = Depends(get_db)):
     )
     messages = result.scalars().all()
 
-    # 构建 agent_id → Agent 对象映射
+    # 构建 agent_id → Agent 对象映射（批量加载，避免 N+1）
     agent_map: dict[str, Agent] = {}
-    all_ids: set[str] = set()
-    for m in messages:
-        if m.agent_id:
-            all_ids.add(m.agent_id)
-    for aid in all_ids:
-        agent = await db.get(Agent, aid)
-        if agent:
-            agent_map[aid] = agent
+    all_ids: set[str] = {m.agent_id for m in messages if m.agent_id}
+    if all_ids:
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(all_ids)))
+        agent_map = {a.id: a for a in agents_result.scalars().all()}
 
     # 生成 Markdown
     date_str = (session.created_at or _utcnow()).strftime("%Y-%m-%d")
@@ -332,9 +328,16 @@ async def _build_session_response(session_id: str, db: AsyncSession) -> SessionR
     if not session:
         raise HTTPException(404, "Session not found")
 
+    # 批量加载所有 Agent，避免 N+1
+    agent_ids = [sa.agent_id for sa in session.agents]
+    agent_map: dict[str, Agent] = {}
+    if agent_ids:
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
+        agent_map = {a.id: a for a in agents_result.scalars().all()}
+
     agent_bindings = []
     for sa in session.agents:
-        agent = await db.get(Agent, sa.agent_id)
+        agent = agent_map.get(sa.agent_id)
         if agent:
             agent_bindings.append({
                 "id": sa.id,
