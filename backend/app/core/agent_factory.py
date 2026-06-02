@@ -158,6 +158,7 @@ async def create_temp_agent(
         system_prompt=system_prompt,
         capability_tags=[capability],
         is_deletable=True,
+        is_temp=True,
         encrypted_api_key=encrypted_key,
     )
     db.add(agent)
@@ -191,7 +192,7 @@ async def destroy_temp_agents(db: AsyncSession, session_id: str) -> int:
     destroyed = 0
     for sa in session_agents:
         agent = await db.get(Agent, sa.agent_id)
-        if agent and agent.is_deletable:
+        if agent and agent.is_temp:
             await db.delete(sa)
             await db.delete(agent)
             destroyed += 1

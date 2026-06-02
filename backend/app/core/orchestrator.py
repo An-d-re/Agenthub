@@ -125,10 +125,9 @@ class Orchestrator:
                     next_phase = await handler.execute(ctx)
                     self._pending_events.extend(pending)
 
-                    # 自动推进到下一阶段
-                    if next_phase:
+                    # 自动推进循环：连续执行不需要用户交互的阶段
+                    while next_phase and next_phase in PHASE_REGISTRY:
                         plan.phase = next_phase
-                        # executing 阶段直接执行任务，不走 execute()（那是处理用户输入）
                         if next_phase == "executing":
                             exec_pending: list[dict] = []
                             exec_ctx = PhaseContext(
@@ -136,55 +135,18 @@ class Orchestrator:
                                 mentions=mentions, pending_events=exec_pending,
                                 orchestrator=self,
                             )
-                            from app.core.phases.executing import ExecutingHandler
-                            await ExecutingHandler().execute_tasks(exec_ctx)
+                            await PHASE_REGISTRY["executing"].execute_tasks(exec_ctx)
                             self._pending_events.extend(exec_pending)
-                        elif next_phase in PHASE_REGISTRY:
-                            next_pending: list[dict] = []
-                            next_ctx = PhaseContext(
-                                db=db, plan=plan, user_message="",
-                                mentions=mentions, pending_events=next_pending,
-                                orchestrator=self,
-                            )
-                            next_handler = PHASE_REGISTRY[next_phase]
-                            further = await next_handler.execute(next_ctx)
-                            self._pending_events.extend(next_pending)
-
-                            if further:
-                                plan.phase = further
-                                # 二级推进到 executing：执行任务
-                                if further == "executing":
-                                    exec_pending: list[dict] = []
-                                    exec_ctx = PhaseContext(
-                                        db=db, plan=plan, user_message="",
-                                        mentions=mentions, pending_events=exec_pending,
-                                        orchestrator=self,
-                                    )
-                                    exec_handler = PHASE_REGISTRY["executing"]
-                                    await exec_handler.execute_tasks(exec_ctx)
-                                    self._pending_events.extend(exec_pending)
-                                elif further == "confirmed":
-                                    # confirmed 可能自动推进到 executing
-                                    conf_pending: list[dict] = []
-                                    conf_ctx = PhaseContext(
-                                        db=db, plan=plan, user_message="",
-                                        mentions=mentions, pending_events=conf_pending,
-                                        orchestrator=self,
-                                    )
-                                    conf_handler = PHASE_REGISTRY["confirmed"]
-                                    conf_next = await conf_handler.execute(conf_ctx)
-                                    self._pending_events.extend(conf_pending)
-                                    if conf_next:
-                                        plan.phase = conf_next
-                                        if conf_next == "executing":
-                                            exec_pending2: list[dict] = []
-                                            exec_ctx2 = PhaseContext(
-                                                db=db, plan=plan, user_message="",
-                                                mentions=mentions, pending_events=exec_pending2,
-                                                orchestrator=self,
-                                            )
-                                            await PHASE_REGISTRY["executing"].execute_tasks(exec_ctx2)
-                                            self._pending_events.extend(exec_pending2)
+                            break
+                        # 其他阶段：运行后检查是否继续推进
+                        advance_pending: list[dict] = []
+                        advance_ctx = PhaseContext(
+                            db=db, plan=plan, user_message="",
+                            mentions=mentions, pending_events=advance_pending,
+                            orchestrator=self,
+                        )
+                        next_phase = await PHASE_REGISTRY[next_phase].execute(advance_ctx)
+                        self._pending_events.extend(advance_pending)
 
                 elif phase == "done":
                     self.middleware.reset_session(self.session_id)

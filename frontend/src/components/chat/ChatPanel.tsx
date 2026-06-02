@@ -90,12 +90,15 @@ export function ChatPanel() {
   // isThinking 超时时视为未在思考
   const effectiveThinking = isThinking && !thinkingTimedOut;
 
-  const [sessionAgents, setSessionAgents] = useState<string[]>([]);
+  const sessionAgents = useChatStore(s => s.sessionAgentIds[activeSessionId || ""] ?? EMPTY_ARRAY);
   useEffect(() => {
     if (!activeSessionId) return;
     let cancelled = false;
     fetch(`${API_BASE}/api/sessions/${activeSessionId}`).then(r => r.json()).then(data => {
-      if (!cancelled) setSessionAgents((data.agents || []).map((a: {agent_id:string}) => a.agent_id));
+      if (!cancelled) {
+        const ids = (data.agents || []).map((a: {agent_id:string}) => a.agent_id);
+        useChatStore.getState().initSessionAgents(activeSessionId, ids);
+      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [activeSessionId]);
@@ -109,14 +112,14 @@ export function ChatPanel() {
   const handleAddMember = async (agentId: string) => {
     if (!activeSessionId) return;
     await fetch(`${API_BASE}/api/sessions/${activeSessionId}/agents/${agentId}`, {method:"POST"});
-    setSessionAgents([...sessionAgents, agentId]);
+    useChatStore.getState().addSessionAgent(activeSessionId, agentId);
     refreshSessions();
   };
 
   const handleRemoveMember = async (agentId: string) => {
     if (!activeSessionId) return;
     await fetch(`${API_BASE}/api/sessions/${activeSessionId}/agents/${agentId}`, {method:"DELETE"});
-    setSessionAgents(sessionAgents.filter(id => id !== agentId));
+    useChatStore.getState().removeSessionAgent(activeSessionId, agentId);
     refreshSessions();
   };
 
@@ -265,7 +268,7 @@ export function ChatPanel() {
                 return (
                   <div key={aid} className="flex items-center justify-between py-1.5">
                     <span className="text-[14px]">{agent?.name || aid.slice(0,8)}</span>
-                    {sessionAgents.length > 1 && (
+                    {sessionAgents.length > 1 && agent?.roleType !== "system" && (
                       <button onClick={()=>handleRemoveMember(aid)}
                         className="text-[12px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 px-3 py-1 rounded-lg transition-colors">移除</button>
                     )}

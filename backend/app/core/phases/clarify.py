@@ -1,6 +1,7 @@
 """阶段：clarify（需求澄清）—— Critic 角色质疑需求，最多 2 轮。"""
 
 import logging
+import re
 from app.core.phases.base import BasePhaseHandler, PhaseContext
 from app.core.prompts import CRITIC_SYSTEM_PROMPT
 from app.services.adapters.base import AgentContext, AgentRole
@@ -13,28 +14,46 @@ class ClarifyHandler(BasePhaseHandler):
 
     MAX_CLARIFY_ROUNDS = 2
 
-    # 简单确定性任务模式：不需要需求澄清，直接推进
-    TRIVIAL_PATTERNS = [
-        # 纯计算
-        r"^(计算|算|帮我算|请计算|帮我计算)\b",
-        r"^[0-9+\-*/().\s^%]+$",
-        r"^\d+\s*[+\-*/×÷xX]\s*\d+",
-        # 纯翻译
-        r"^(翻译|把|将).*(翻译|译)(成|为|一下)",
-        r"^translate\b",
-        # 纯事实查询
-        r"^(什么是|什么叫|定义|解释一下)\b",
-        r"^(what is|define|explain)\b",
-    ]
+    # 纯数学算式：跳过 LLM 复杂度评估，直接判 simple
+    MATH_ONLY_RE = re.compile(
+        r"^[\d+\-*/().\s^%×÷xX]+$|^\d+\s*[+\-*/×÷xX]\s*\d+"
+    )
 
-    def _is_trivial_task(self, user_message: str) -> bool:
-        """检测是否为简单确定性任务，无需 clarify。"""
-        import re
-        stripped = user_message.strip()
-        for pattern in self.TRIVIAL_PATTERNS:
-            if re.search(pattern, stripped, re.IGNORECASE):
-                return True
-        return False
+    async def _assess_complexity(self, ctx: PhaseContext) -> str:
+        """快速调用 Critic 判断任务简单/复杂。返回 'simple' 或 'complex'。"""
+        # 纯数字算式 → 直接跳过 LLM
+        if self.MATH_ONLY_RE.match(ctx.user_message.strip()):
+            return "simple"
+
+        agent, adapter = await self._get_agent_for_role(
+            ctx.db, ctx.plan.session_id, "critic", ctx.mentions,
+        )
+        if not agent or not adapter:
+            return "complex"
+
+        try:
+            context = AgentContext(
+                session_id=ctx.plan.session_id,
+                agent_role=AgentRole.CODER,
+                config={"system_prompt": (
+                    "You are a task complexity assessor. "
+                    "Given a user request, reply with exactly ONE word: "
+                    '"simple" if the task is a straightforward computation, fact lookup, '
+                    "translation, or single-step operation that needs NO clarification. "
+                    '"complex" if it involves multi-step reasoning, code generation, '
+                    "ambiguous requirements, design decisions, or anything needing discussion.\n\n"
+                    'Reply ONLY with "simple" or "complex".'
+                )},
+            )
+            resp = await adapter.send_message(context, ctx.user_message)
+            await adapter.stop()
+            result = resp.content.strip().lower()
+            if "simple" in result and "complex" not in result:
+                return "simple"
+            return "complex"
+        except Exception as e:
+            logger.warning("复杂度评估失败，默认走完整 clarify: %s", e)
+            return "complex"
 
     async def execute(self, ctx: PhaseContext) -> str | None:
         # 停止检查
@@ -48,7 +67,7 @@ class ClarifyHandler(BasePhaseHandler):
         task_dag = ctx.plan.task_dag or {}
         clarify_round = task_dag.get("clarify_round", 0)
 
-        # 轮次 1+：必须等用户说 ok/确认 才推进（见 CONTEXT.md clarify 阶段规则）
+        # 轮次 1+：必须等用户说 ok/确认 才推进
         if clarify_round > 0:
             lower = ctx.user_message.strip().lower()
             if lower in ("确认", "confirm", "ok", "好的", "可以", "执行", "开始", "go", "yes", "是"):
@@ -60,15 +79,17 @@ class ClarifyHandler(BasePhaseHandler):
                 )
                 return "comparison"
 
-        # 简单确定性任务：跳过 clarify，直接进入 comparison
-        if clarify_round == 0 and self._is_trivial_task(ctx.user_message):
-            ctx.plan.phase = "comparison"
-            ctx.plan.task_dag = {}
-            await self._send_system_message(
-                ctx.db, ctx.plan.session_id, "需求已明确（简单任务），正在生成方案…",
-                pending_events=ctx.pending_events,
-            )
-            return "comparison"
+        # 首次对话：LLM 复杂度评估 → 简单任务跳过 clarify
+        if clarify_round == 0:
+            complexity = await self._assess_complexity(ctx)
+            if complexity == "simple":
+                ctx.plan.phase = "comparison"
+                ctx.plan.task_dag = {}
+                await self._send_system_message(
+                    ctx.db, ctx.plan.session_id, "需求已明确（简单任务），正在生成方案…",
+                    pending_events=ctx.pending_events,
+                )
+                return "comparison"
 
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
@@ -98,7 +119,7 @@ class ClarifyHandler(BasePhaseHandler):
         history = await self._get_conversation_history(ctx.db, ctx.plan.session_id)
         context = AgentContext(
             session_id=ctx.plan.session_id,
-            agent_role=AgentRole.CODER,  # Critic 通过 system_prompt 控制行为，role 仅用于 trace
+            agent_role=AgentRole.CODER,
             conversation_history=history,
             config={"system_prompt": CRITIC_SYSTEM_PROMPT},
         )
@@ -112,13 +133,11 @@ class ClarifyHandler(BasePhaseHandler):
         clarify_round += 1
         ctx.plan.task_dag = task_dag | {"clarify_round": clarify_round}
 
-        # round 0（首次对话）：Critic 判断需求已足够清楚 → 直接推进
         if clarify_round == 1 and self._critic_has_signaled_done(content):
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}
             return "comparison"
 
-        # round 1+：不检测信号词，必须等用户说"ok/确认"才会推进
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}

@@ -49,8 +49,13 @@ class ComparisonHandler(BasePhaseHandler):
             ctx.db, ctx.plan.session_id, "planner", ctx.mentions,
         )
         if not agent or not adapter:
+            agent, adapter = await self._auto_create_agent(
+                ctx.db, ctx.plan.session_id, "planner",
+                task_context={"title": ctx.user_message[:80], "description": ctx.user_message[:200]},
+            )
+        if not agent or not adapter:
             await self._send_system_message(
-                ctx.db, ctx.plan.session_id, "没有可用的 Planner Agent。",
+                ctx.db, ctx.plan.session_id, "没有可用的 Planner Agent，且无法自动创建。",
                 pending_events=ctx.pending_events,
             )
             return None

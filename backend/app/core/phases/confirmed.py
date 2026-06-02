@@ -215,10 +215,17 @@ class ConfirmedHandler(BasePhaseHandler):
         task_dag = ctx.plan.task_dag or []
         id_map: dict[str, dict] = {td["id"]: td for td in task_dag}
 
+        logger.info(
+            "confirm_with_assignments: assignments=%s, dag_ids=%s",
+            [{a.get("task_id"): a.get("agent_id") or "NEW"} for a in assignments],
+            {td["id"]: td.get("required_capability", "?") for td in task_dag},
+        )
+
         for assign in assignments:
             dag_id = assign.get("task_id", "")
             td = id_map.get(dag_id)
             if not td:
+                logger.warning("confirm_with_assignments: dag_id=%s NOT FOUND in id_map keys=%s", dag_id, list(id_map.keys()))
                 continue
 
             agent_id = assign.get("agent_id")
@@ -234,8 +241,10 @@ class ConfirmedHandler(BasePhaseHandler):
                 api_key = assign.get("api_key")
                 db_task = await ctx.db.get(Task, td.get("_db_id", ""))
                 if not db_task:
+                    logger.warning("confirm_with_assignments: db_task NOT FOUND for dag_id=%s _db_id=%s", dag_id, td.get("_db_id"))
                     continue
                 capability = td.get("required_capability", "code")
+                logger.info("confirm_with_assignments: creating temp agent for dag_id=%s capability=%s", dag_id, capability)
                 new_agent = await create_temp_agent(
                     ctx.db, ctx.plan.session_id, db_task,
                     capability, adapter_type, api_key,

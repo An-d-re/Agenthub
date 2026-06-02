@@ -13,14 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import async_session
 from app.core.event_bus import event_bus
-from app.core.prompts import (
-    CODER_TASK_PROMPT,
-    REVIEWER_PROMPT_PREFIX,
-    VERIFIER_TASK_PROMPT,
-)
-from app.core.tracer import tracer
 from app.models.agent import Agent
-from app.models.artifact import Artifact
 from app.models.message import Message
 from app.models.plan import Plan
 from app.models.session import SessionAgent
@@ -234,8 +227,16 @@ class BasePhaseHandler:
             "critic": "Critic · 分析者",
         }
         role_prompts = {
-            "coder": CODER_TASK_PROMPT,
-            "reviewer": VERIFIER_TASK_PROMPT,
+            "coder": (
+                "You are a capable task executor. Execute the assigned task precisely. "
+                "Use sandbox tools (write_file, run_command, read_file, install_deps, list_files) "
+                "to complete the work. Test before finishing. Deliver results as a natural language summary."
+            ),
+            "reviewer": (
+                "You are an independent verifier. Re-do the work independently, "
+                "compare results, and state whether they match. "
+                "Output natural text. Do NOT use JSON."
+            ),
             "planner": "You are a project planner. Decompose requirements into executable tasks.",
             "critic": "You are a technical advisor. Clarify requirements before implementation.",
         }
@@ -263,6 +264,7 @@ class BasePhaseHandler:
             system_prompt=system_prompt,
             capability_tags=capability_tags,
             is_deletable=True,
+            is_temp=True,
         )
         db.add(agent)
         await db.flush()
@@ -552,189 +554,6 @@ class BasePhaseHandler:
         except json.JSONDecodeError:
             pass
         return None
-
-    # ── Artifact 提取 ───────────────────────────────────────
-
-    def _guess_file_path(self, full_content: str, code: str, language: str) -> str:
-        path_match = re.search(
-            r'(?:File|文件|path):\s*([^\s\n]+)', full_content, re.IGNORECASE
-        )
-        if path_match:
-            raw = path_match.group(1)
-            raw = re.sub(r'\.\.+', '', raw)
-            raw = raw.lstrip('/\\~')
-            return raw
-        ext_map = {
-            "python": "output.py", "py": "output.py",
-            "typescript": "output.ts", "ts": "output.ts",
-            "tsx": "component.tsx", "jsx": "component.jsx",
-            "javascript": "output.js", "js": "output.js",
-            "html": "index.html", "css": "styles.css",
-            "json": "config.json", "yaml": "config.yaml",
-            "sql": "query.sql", "rust": "main.rs",
-            "go": "main.go", "java": "Main.java",
-        }
-        return ext_map.get(language.lower(), f"output.{language or 'txt'}")
-
-    async def _extract_artifacts(
-        self, db: AsyncSession, session_id: str, task: Task, content: str,
-        pending_events: list[dict],
-    ) -> list[dict]:
-        artifacts: list[dict] = []
-        code_blocks = re.finditer(r'`{3}(\w*)\s*\n(.*?)`{3}', content, re.DOTALL)
-        for match in code_blocks:
-            language = match.group(1) or "text"
-            code = match.group(2).strip()
-            if len(code) < 10:
-                continue
-            file_path = self._guess_file_path(content, code, language)
-            original = ""
-            prev_result = await db.execute(
-                select(Artifact).where(
-                    Artifact.session_id == session_id,
-                    Artifact.file_path == file_path,
-                    Artifact.task_id != task.id,
-                ).order_by(Artifact.created_at.desc()).limit(1)
-            )
-            prev_artifact = prev_result.scalar_one_or_none()
-            if prev_artifact and prev_artifact.modified_content:
-                original = prev_artifact.modified_content
-
-            artifact = Artifact(
-                task_id=task.id, session_id=session_id,
-                file_path=file_path, original_content=original,
-                modified_content=code, language=language, artifact_type="code",
-            )
-            db.add(artifact)
-            await db.flush()
-            artifacts.append({
-                "id": artifact.id, "file_path": artifact.file_path,
-                "language": artifact.language,
-                "original_content": original, "modified_content": code,
-            })
-            pending_events.append({
-                "type": "artifact.created",
-                "session_id": session_id,
-                "payload": {
-                    "artifact_id": artifact.id, "task_id": task.id,
-                    "file_path": file_path, "language": language,
-                    "original_content": original, "content_preview": code[:200],
-                },
-            })
-
-        if not artifacts and len(content) > 50:
-            artifact = Artifact(
-                task_id=task.id, session_id=session_id,
-                file_path=f"output/task-{task.title[:30]}.md",
-                original_content="", modified_content=content,
-                language="markdown", artifact_type="code",
-            )
-            db.add(artifact)
-            await db.flush()
-            artifacts.append({
-                "id": artifact.id, "file_path": artifact.file_path,
-                "language": "markdown", "modified_content": content,
-            })
-            pending_events.append({
-                "type": "artifact.created",
-                "session_id": session_id,
-                "payload": {
-                    "artifact_id": artifact.id, "task_id": task.id,
-                    "file_path": artifact.file_path, "language": "markdown",
-                    "content_preview": content[:200],
-                },
-            })
-        return artifacts
-
-    # ── Reviewer ────────────────────────────────────────────
-
-    async def _review_task_output(
-        self, db: AsyncSession, session_id: str, task: Task, output: str,
-        pending_events: list[dict], mentions: Optional[list[str]] = None,
-    ) -> bool:
-        """双层审查：静态规则（零 token）→ LLM Reviewer。返回 True 表示通过。"""
-        # Layer 1: 静态规则检查
-        from app.core.static_reviewer import review_static
-        static_result = review_static(output)
-        if not static_result.passed:
-            task.status = "retrying"
-            task.retry_count += 1
-            task.error_message = "; ".join(static_result.errors)
-            await db.flush()
-            await self._publish_task_update(session_id, task, "retrying", pending_events)
-            await self._send_system_message(
-                db, session_id,
-                f"🔍 静态检查未通过：{'; '.join(static_result.errors)}\n"
-                + (f"⚠️ 警告：{'; '.join(static_result.warnings)}" if static_result.warnings else ""),
-                agent_role="reviewer", pending_events=pending_events,
-            )
-            return False
-
-        # Layer 2: LLM Reviewer
-        reviewer_agent, reviewer_adapter = await self._get_agent_for_role(
-            db, session_id, "reviewer", mentions,
-            task_context={"title": task.title, "description": task.description or ""},
-        )
-        if not reviewer_agent or not reviewer_adapter:
-            # 静态检查通过 + 无 LLM reviewer = 通过
-            if static_result.warnings:
-                await self._send_system_message(
-                    db, session_id,
-                    f"⚠️ 审查警告（仅静态检查）：{'; '.join(static_result.warnings)}",
-                    agent_role="reviewer", pending_events=pending_events,
-                )
-            return True
-
-        try:
-            review_ctx = AgentContext(
-                session_id=session_id,
-                agent_role=AgentRole.REVIEWER,
-                current_task={"id": task.id, "title": task.title, "description": task.description or ""},
-                config={"system_prompt": REVIEWER_PROMPT_PREFIX},
-            )
-            review_input = (
-                f"Task: {task.title}\n"
-                f"Description: {task.description or 'N/A'}\n\n"
-                f"Static checks passed. Code output to review:\n\n{output[:4000]}"
-            )
-            review_resp = await reviewer_adapter.send_message(review_ctx, review_input)
-            review_data = self._extract_json(review_resp.content)
-
-            if review_data and not review_data.get("passed", True):
-                if task.retry_count >= self.MAX_TASK_RETRIES:
-                    task.status = "dispute"
-                    task.error_message = review_data.get("feedback", "Reviewer 连续不通过")
-                    await db.flush()
-                    await self._publish_task_update(session_id, task, "dispute", pending_events)
-                    await self._send_system_message(
-                        db, session_id,
-                        f"❌ 任务「{task.title}」Reviewer 审查 {task.retry_count + 1} 次仍未通过。\n"
-                        f"反馈：{review_data.get('feedback', '')[:200]}\n输入「重试」重新执行。",
-                        agent_id=reviewer_agent.id, agent_role="reviewer",
-                        pending_events=pending_events,
-                    )
-                    return False
-                task.status = "retrying"
-                task.retry_count += 1
-                task.error_message = review_data.get("feedback", "")
-                await db.flush()
-                await self._publish_task_update(session_id, task, "retrying", pending_events)
-                await self._send_system_message(
-                    db, session_id,
-                    f"🔍 Reviewer: {review_data.get('feedback', '审查未通过')}\n"
-                    f"📝 建议: {review_data.get('suggested_changes', '')[:300]}",
-                    agent_id=reviewer_agent.id, agent_role="reviewer",
-                    pending_events=pending_events,
-                )
-                return False
-        except Exception as e:
-            logger.warning("Reviewer 调用失败，跳过审查: %s", e)
-        finally:
-            try:
-                await reviewer_adapter.stop()
-            except Exception:
-                pass
-        return True
 
     # ── 任务执行辅助 ────────────────────────────────────────
 

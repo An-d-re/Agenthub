@@ -152,6 +152,10 @@ interface ChatState {
   traceSpans: Record<string, TraceSpan[]>;
   addTraceSpan: (sessionId: string, span: TraceSpan) => void;
   _finalizedIds: Set<string>;  // 已完成的消息 ID，防止流式 token 覆盖
+  sessionAgentIds: Record<string, string[]>;
+  initSessionAgents: (sessionId: string, ids: string[]) => void;
+  addSessionAgent: (sessionId: string, agentId: string) => void;
+  removeSessionAgent: (sessionId: string, agentId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -337,6 +341,31 @@ export const useChatStore = create<ChatState>((set) => ({
 
   setPendingSend: (msg) => set({ pendingSend: msg }),
   setReplyTarget: (target) => set({ replyTarget: target }),
+
+  sessionAgentIds: {},
+  initSessionAgents: (sessionId, ids) =>
+    set((state) => ({
+      sessionAgentIds: { ...state.sessionAgentIds, [sessionId]: ids },
+    })),
+  addSessionAgent: (sessionId, agentId) =>
+    set((state) => {
+      const existing = state.sessionAgentIds[sessionId] || [];
+      if (existing.includes(agentId)) return state;
+      return {
+        sessionAgentIds: {
+          ...state.sessionAgentIds,
+          [sessionId]: [...existing, agentId],
+        },
+      };
+    }),
+  removeSessionAgent: (sessionId, agentId) =>
+    set((state) => ({
+      sessionAgentIds: {
+        ...state.sessionAgentIds,
+        [sessionId]: (state.sessionAgentIds[sessionId] || []).filter((id) => id !== agentId),
+      },
+    })),
+
   addTraceSpan: (sessionId, span) =>
     set((state) => ({
       traceSpans: {

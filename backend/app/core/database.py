@@ -63,26 +63,6 @@ async def init_db():
                     "每个任务有清晰的依赖关系和可验证的交付物。",
                     is_deletable=False,
                 ),
-                Agent(
-                    name="Coder · 全栈工程师",
-                    role_type="system",
-                    adapter_type="deepseek",
-                    capability_tags=["代码生成", "调试", "重构", "Python", "TypeScript", "React"],
-                    system_prompt="你是一位资深全栈工程师，擅长 Python、TypeScript、React。"
-                    "生成代码时遵循最佳实践，包含错误处理和类型注解。"
-                    "产出完整可运行的代码，标注文件路径。回复简洁，只在被问到时才解释代码。",
-                    is_deletable=False,
-                ),
-                Agent(
-                    name="Reviewer · 代码审查",
-                    role_type="system",
-                    adapter_type="deepseek",
-                    capability_tags=["代码审查", "安全审计", "性能优化"],
-                    system_prompt="你是一位严格的代码审查者。检查代码的正确性、安全性和性能。"
-                    "对每个问题给出具体的改进建议。不要纠结于代码风格偏好。"
-                    "输出 JSON 格式：{passed, feedback, suggested_changes}。",
-                    is_deletable=False,
-                ),
             ]
             db.add_all(defaults)
             await db.commit()

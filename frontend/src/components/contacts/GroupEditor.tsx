@@ -18,12 +18,18 @@ export function GroupEditor({ open, onClose }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
 
+  const customAgents = agents.filter(a => a.roleType !== "system");
+  const systemAgentNames = agents
+    .filter(a => a.roleType === "system")
+    .map(a => a.name)
+    .join(" 和 ");
+
   useEffect(() => {
     if (open) {
-      setSelected(new Set(agents.slice(0, 3).map(a => a.id)));
+      setSelected(new Set(customAgents.slice(0, 3).map(a => a.id)));
       setSaving(false);
     }
-  }, [open, agents]);
+  }, [open, agents]); // eslint-disable-line
 
   const toggle = (id: string) => {
     setSelected(prev => {
@@ -35,7 +41,7 @@ export function GroupEditor({ open, onClose }: Props) {
 
   const save = async () => {
     const agentIds = Array.from(selected);
-    if (agentIds.length < 2 || !name.trim()) return;
+    if (!name.trim()) return;
     setSaving(true);
     try {
       const r = await fetch(`${API_BASE}/api/sessions`, {
@@ -83,11 +89,16 @@ export function GroupEditor({ open, onClose }: Props) {
           </div>
 
           <div>
+            {systemAgentNames && (
+              <div className="mb-3 text-[12px] text-[var(--text-secondary)] bg-[var(--accent)]/8 rounded-lg px-3 py-2">
+                群聊将自动包含 {systemAgentNames}
+              </div>
+            )}
             <label className="text-[12px] font-semibold text-[var(--text-secondary)] dark:text-[var(--text-secondary)] uppercase tracking-wider">
-              成员 · {selected.size}/{agents.length}
+              成员 · {selected.size}/{customAgents.length}
             </label>
             <div className="mt-2 space-y-1">
-              {agents.map(agent => {
+              {customAgents.map(agent => {
                 const checked = selected.has(agent.id);
                 return (
                   <button
@@ -123,15 +134,15 @@ export function GroupEditor({ open, onClose }: Props) {
         <div className="p-4 border-t border-[var(--border)]">
           <button
             onClick={save}
-            disabled={saving || selected.size < 2 || !name.trim()}
+            disabled={saving || !name.trim()}
             className={cn(
               "w-full py-2.5 rounded-xl text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
-              selected.size < 2 || !name.trim()
+              !name.trim()
                 ? "bg-[var(--text-tertiary)] text-white cursor-not-allowed"
                 : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
             )}
           >
-            {saving ? "创建中..." : selected.size < 2 ? "至少选择 2 个成员" : "创建群聊"}
+            {saving ? "创建中..." : !name.trim() ? "请输入群聊名称" : "创建群聊"}
           </button>
         </div>
       </div>

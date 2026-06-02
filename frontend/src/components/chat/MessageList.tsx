@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
-import { DiffCard } from "@/components/cards/DiffCard";
+import { MessageBubble } from "./MessageBubble";
 import { PlanCard } from "@/components/cards/PlanCard";
-import { PreviewCard } from "@/components/cards/PreviewCard";
 import { DAGEditor } from "@/components/plans/DAGEditor";
 import { EMPTY_ARRAY, API_BASE } from "@/lib/constants";
-import { MessageBubble } from "./MessageBubble";
 
 interface Props {
   onModify?: (messageId: string, startLine: number, endLine: number, instruction: string) => void;
@@ -26,9 +24,6 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
   );
   const confirmedPlan = useChatStore((s) =>
     activeSessionId ? s.confirmedPlans[activeSessionId] : undefined
-  );
-  const artifacts = useChatStore((s) =>
-    activeSessionId ? (s.artifacts[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
   );
   const clearConfirmedPlan = useChatStore((s) => s.clearConfirmedPlan);
   const removeDagTask = useChatStore((s) => s.removeDagTask);
@@ -167,14 +162,6 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
           onConfirm={handleDagConfirm}
           onDelete={handleDagDelete}
         />
-      )}
-
-      {artifacts.map((a) =>
-        ["html", "svg", "css", "javascript", "js"].includes(a.language) ? (
-          <PreviewCard key={a.artifactId} artifact={a} />
-        ) : (
-          <DiffCard key={a.artifactId} artifact={a} />
-        )
       )}
 
       {/* Thinking indicator */}

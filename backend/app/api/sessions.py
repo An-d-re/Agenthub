@@ -61,6 +61,9 @@ async def create_session(body: SessionCreate, db: AsyncSession = Depends(get_db)
     for agent_id in body.agent_ids:
         db.add(SessionAgent(session_id=session.id, agent_id=agent_id))
 
+    if body.type == "group":
+        await _ensure_system_agents(db, session.id, body.agent_ids)
+
     await db.commit()
     await db.refresh(session)
     return await _build_session_response(session.id, db)
@@ -185,6 +188,9 @@ async def add_agent_to_session(session_id: str, agent_id: str, db: AsyncSession 
 
 @router.delete("/{session_id}/agents/{agent_id}")
 async def remove_agent_from_session(session_id: str, agent_id: str, db: AsyncSession = Depends(get_db)):
+    agent = await db.get(Agent, agent_id)
+    if agent and agent.role_type == "system":
+        raise HTTPException(403, "系统 Agent 不可从群聊中移除")
     result = await db.execute(
         select(SessionAgent).where(
             SessionAgent.session_id == session_id,
@@ -285,6 +291,25 @@ async def export_session(session_id: str, db: AsyncSession = Depends(get_db)):
             "X-Saved-Path": quote(filepath, safe="/:\\"),
         },
     )
+
+
+async def _ensure_system_agents(db, session_id: str, existing_ids: list[str]) -> None:
+    """确保群聊中有 Critic 和 Planner 系统 Agent。已存在的跳过。"""
+    result = await db.execute(
+        select(Agent).where(Agent.role_type == "system")
+    )
+    for agent in result.scalars().all():
+        if agent.id in existing_ids:
+            continue
+        already = await db.execute(
+            select(SessionAgent).where(
+                SessionAgent.session_id == session_id,
+                SessionAgent.agent_id == agent.id,
+            )
+        )
+        if already.scalar_one_or_none():
+            continue
+        db.add(SessionAgent(session_id=session_id, agent_id=agent.id))
 
 
 def _role_label(msg: Message, agent_map: dict[str, "Agent"]) -> str:

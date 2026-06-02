@@ -1,4 +1,4 @@
-"""阶段：executing（迭代执行）—— 并发执行就绪任务，Reviewer 审查，自动重试。"""
+"""阶段：executing（迭代执行）—— 并发执行就绪任务。"""
 
 import asyncio
 import logging
@@ -7,11 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 from app.core.middleware import MiddlewareContext
 from app.core.phases.base import BasePhaseHandler, PhaseContext, _utcnow
-from app.core.prompts import CODER_TASK_PROMPT, VERIFIER_TASK_PROMPT
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.message import Message
-from app.models.artifact import Artifact
 from app.core.tracer import tracer
 from app.services.adapters.base import AgentContext, AgentRole
 
@@ -19,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ExecutingHandler(BasePhaseHandler):
-    """执行任务 DAG：并发调度、Reviewer 审查、自动重试。"""
+    """执行任务 DAG：并发调度、结果展示。"""
 
     async def execute(self, ctx: PhaseContext) -> str | None:
         lower = ctx.user_message.strip().lower()
@@ -104,7 +102,6 @@ class ExecutingHandler(BasePhaseHandler):
         if not ready:
             return
 
-        # 检查停止信号
         orch = ctx.orchestrator
         if orch and hasattr(orch, '_check_stop') and orch._check_stop():
             await self._send_system_message(
@@ -115,12 +112,11 @@ class ExecutingHandler(BasePhaseHandler):
 
         logger.info("并行执行 %d 个就绪任务", len(ready))
 
-        # 提交父 session 释放写锁，让 run_one 的独立 session 可以并发写入
+        # 提交父 session 释放写锁
         await ctx.db.commit()
 
         async def run_one(task_id: str) -> None:
             async with async_session() as task_db:
-                # SELECT ... FOR UPDATE 防止并发执行同一任务
                 result = await task_db.execute(
                     select(Task).where(Task.id == task_id).with_for_update()
                 )
@@ -139,7 +135,6 @@ class ExecutingHandler(BasePhaseHandler):
 
         await asyncio.gather(*[run_one(tid) for _, tid in ready])
 
-        # 刷新外层 session，使其看到内部提交的最新状态
         ctx.db.expire_all()
 
         if orch and hasattr(orch, '_check_stop') and orch._check_stop():
@@ -151,15 +146,14 @@ class ExecutingHandler(BasePhaseHandler):
         self, db: AsyncSession, plan: Plan, task: Task,
         mentions: list[str], session_id: str, orch=None,
     ) -> None:
-        """执行单个任务：中间件 → Agent → 审查 → 标记完成。"""
+        """执行单个任务：中间件 → 选 Agent → adapter.execute_task() → 发结果 → 标记 done。"""
         pending: list[dict] = []
 
         conversation_history = await self._get_conversation_history(db, session_id)
 
         # 运行中间件链
         if orch and hasattr(orch, 'middleware'):
-            from app.core.middleware import MiddlewareContext as MwCtx
-            mw_ctx = MwCtx(
+            mw_ctx = MiddlewareContext(
                 session_id=session_id, task_id=task.id,
                 conversation_history=conversation_history,
                 task_payload={"title": task.title, "description": task.description},
@@ -178,14 +172,15 @@ class ExecutingHandler(BasePhaseHandler):
                 return
             conversation_history = mw_ctx.conversation_history
 
-        # 从 DAG 中解析任务所需能力（required_capability）
-        capability = self._resolve_task_capability(plan, task)
-        role_name = capability  # calculate / code / verify / design / analyze / write / data
-
-        # 优先使用 DAG 分配的 agent，回退到按角色查找
+        # 选择 Agent：优先 DAG 分配，回退到自动创建
         if task.assigned_agent_id:
             agent, adapter = await self._get_agent_adapter(db, task.assigned_agent_id)
+            logger.info(
+                "_execute_single_task: task=%s title=%s assigned_agent_id=%s agent_name=%s",
+                task.id, task.title, task.assigned_agent_id, agent.name if agent else "NOT_FOUND",
+            )
         else:
+            capability = self._resolve_task_capability(plan, task)
             from app.core.agent_factory import match_task_to_agent, create_temp_agent
             match = await match_task_to_agent(db, session_id, capability, set())
             if match.matched and match.agent:
@@ -193,9 +188,10 @@ class ExecutingHandler(BasePhaseHandler):
                 task.assigned_agent_id = match.agent.id
             else:
                 agent, adapter = None, None
+
         if not agent or not adapter:
-            # 兜底：自动创建临时 Agent
             from app.core.agent_factory import create_temp_agent
+            capability = self._resolve_task_capability(plan, task)
             agent = await create_temp_agent(
                 db, session_id, task, capability, "deepseek",
             )
@@ -221,27 +217,33 @@ class ExecutingHandler(BasePhaseHandler):
         task.started_at = _utcnow()
         await db.flush()
         await self._publish_task_update(session_id, task, "running", pending)
+
         await self._send_system_message(
             db, session_id,
             f"⏳ 正在执行任务「{task.title}」…",
-            agent_id=agent.id, agent_role=agent.role_type or role_name,
-            pending_events=pending,
+            agent_id=agent.id,
+            pending_events=pending, publish_now=True,
         )
 
-        # 根据任务能力选择系统提示词
-        task_prompt = VERIFIER_TASK_PROMPT if capability == "verify" else CODER_TASK_PROMPT
-
+        capability = self._resolve_task_capability(plan, task)
         agent_role = self._capability_to_agent_role(capability)
 
-        from app.core.sandbox.manager import WORKSPACES_ROOT
+        # 需要沙箱工具的能力类型（ReAct + 工具调用循环）
+        SANDBOX_CAPABILITIES = {"code", "data"}
+
         context = AgentContext(
             session_id=session_id,
             agent_role=agent_role,
             conversation_history=conversation_history,
             current_task={"id": task.id, "title": task.title, "description": task.description},
-            config={"system_prompt": task_prompt},
-            workspace_dir=str(WORKSPACES_ROOT / session_id),
+            config={"system_prompt": agent.system_prompt or ""},
         )
+
+        # 沙箱任务需要 workspace_dir
+        if capability in SANDBOX_CAPABILITIES:
+            from app.core.sandbox.manager import SandboxManager
+            sm = SandboxManager(session_id)
+            context.workspace_dir = sm.workspace_path
 
         # 停止检查
         stop_evt = self._get_stop_event(session_id)
@@ -253,20 +255,27 @@ class ExecutingHandler(BasePhaseHandler):
             return
 
         try:
-            # 信号量只包 API 调用，不包重试
             if orch and hasattr(orch, 'middleware'):
                 await orch.middleware.subagent_limiter.acquire(session_id)
             try:
-                async with tracer.span(
-                    session_id=session_id,
-                    operation_name="adapter.execute_task",
-                    service_name=adapter.adapter_type,
-                    tags={"task_id": task.id, "task_title": task.title},
-                ) as span:
-                    response = await adapter.execute_task(context, {
-                        "id": task.id, "title": task.title, "description": task.description,
-                    })
-                    span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+                if capability in SANDBOX_CAPABILITIES:
+                    async with tracer.span(
+                        session_id=session_id,
+                        operation_name="adapter.execute_task",
+                        service_name=adapter.adapter_type,
+                        tags={"task_id": task.id, "task_title": task.title},
+                    ) as span:
+                        response = await adapter.execute_task(context, {
+                            "id": task.id, "title": task.title, "description": task.description,
+                        })
+                        span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
+                else:
+                    task_prompt = (
+                        f"任务：{task.title}\n"
+                        f"描述：{task.description}\n\n"
+                        "请完成上述任务，给出完整的过程和结论。"
+                    )
+                    response = await adapter.send_message(context, task_prompt)
             finally:
                 if orch and hasattr(orch, 'middleware'):
                     orch.middleware.subagent_limiter.release(session_id)
@@ -276,99 +285,13 @@ class ExecutingHandler(BasePhaseHandler):
             task.completed_at = _utcnow()
             await db.flush()
 
-            artifacts = await self._extract_artifacts(db, session_id, task, response.content, pending)
-
-            # 处理工具调用产生的 artifacts（Agent 通过 write_file 创建的文件）
-            for a in response.artifacts:
-                file_path = a.get("file_path", "")
-                # 跳过已在 _extract_artifacts 中通过文本解析创建的文件
-                if any(art.get("file_path") == file_path for art in artifacts):
-                    continue
-                art = Artifact(
-                    task_id=task.id, session_id=session_id,
-                    file_path=file_path,
-                    original_content="",
-                    modified_content=a.get("content", ""),
-                    language=a.get("language", ""),
-                    artifact_type="code",
-                )
-                db.add(art)
-                await db.flush()
-                artifacts.append({
-                    "id": art.id, "file_path": art.file_path,
-                    "language": art.language,
-                    "original_content": "", "modified_content": a.get("content", ""),
-                })
-                pending.append({
-                    "type": "artifact.created",
-                    "session_id": session_id,
-                    "payload": {
-                        "artifact_id": art.id, "task_id": task.id,
-                        "file_path": file_path, "language": a.get("language", ""),
-                        "original_content": "", "content_preview": a.get("content", "")[:200],
-                    },
-                })
-
             await self._publish_task_update(session_id, task, "done", pending)
 
-            # verify 任务：Agent 输出直接展示在聊天流中
-            if capability == "verify":
-                preview = response.content[:500] + ("…" if len(response.content) > 500 else "")
-                await self._send_system_message(
-                    db, session_id,
-                    preview,
-                    agent_id=agent.id, agent_role="verify", pending_events=pending,
-                )
-            else:
-                # Sandbox 执行：仅对文本提取的代码块执行（工具创建的 Agent 已自行测试）
-                sandbox_results = []
-                text_artifacts = [a for a in artifacts if not any(
-                    ra.get("file_path") == a.get("file_path") for ra in response.artifacts
-                )]
-                if text_artifacts:
-                    sandbox_results = await self._run_in_sandbox(session_id, text_artifacts, pending)
-
-                task.status = "reviewing"
-                await db.flush()
-                await self._publish_task_update(session_id, task, "reviewing", pending)
-                await self._send_system_message(
-                    db, session_id,
-                    f"🔍 正在审查任务「{task.title}」…",
-                    agent_id=agent.id, agent_role="reviewer",
-                    pending_events=pending,
-                )
-
-                reviewed = await self._review_task_output(
-                    db, session_id, task, response.content, pending, mentions,
-                )
-                if not reviewed:
-                    await db.flush()
-                    if task.status != "dispute":
-                        await self._execute_single_task(db, plan, task, mentions, session_id)
-                    return
-
-                # Agent 输出直接展示在聊天流中（作为 agent 消息，非 system）
-                preview = response.content[:500] + ("…" if len(response.content) > 500 else "")
-                await self._send_system_message(
-                    db, session_id, preview,
-                    agent_id=agent.id, agent_role=capability, pending_events=pending,
-                )
-                if artifacts:
-                    lines = [f"📁 生成了 {len(artifacts)} 个文件："]
-                    lines.extend(f"  • `{a['file_path']}`" for a in artifacts)
-                    await self._send_system_message(
-                        db, session_id, "\n".join(lines),
-                        pending_events=pending,
-                    )
-                if sandbox_results:
-                    lines = ["🏗️ 沙箱执行结果："]
-                    for sr in sandbox_results:
-                        status = "✅" if sr.get("ok") else "❌"
-                        lines.append(f"  {status} `{sr['file']}` — {sr.get('message', sr.get('error', ''))[:150]}")
-                    await self._send_system_message(
-                        db, session_id, "\n".join(lines),
-                        pending_events=pending,
-                    )
+            # 将 Agent 完整输出展示在聊天流中
+            await self._send_system_message(
+                db, session_id, response.content,
+                agent_id=agent.id, agent_role=capability, pending_events=pending,
+            )
 
         except Exception as e:
             logger.exception("任务执行失败: %s", e)
@@ -399,7 +322,6 @@ class ExecutingHandler(BasePhaseHandler):
                     await adapter.stop()
                 except Exception:
                     logger.warning("Failed to stop adapter", exc_info=True)
-            # 发布独立 session 的事件
             for evt in pending:
                 try:
                     from app.core.event_bus import event_bus
@@ -408,12 +330,20 @@ class ExecutingHandler(BasePhaseHandler):
                     logger.warning("Failed to publish pending event", exc_info=True)
 
     def _resolve_task_capability(self, plan: Plan, task: Task) -> str:
-        """从 DAG 中解析任务所需能力，回退到 'code'。"""
+        """从 DAG 中解析任务所需能力，匹配失败时回退到 'code'。"""
         task_dag = plan.task_dag or []
-        db_id = str(task.id)
         for td in task_dag:
-            if td.get("_db_id") == db_id or td.get("id") == task.title:
-                return td.get("required_capability", "code")
+            if td.get("_db_id") == str(task.id) or td.get("title") == task.title:
+                capability = td.get("required_capability", "code")
+                logger.info(
+                    "_resolve_task_capability: MATCHED task=%s title=%s → capability=%s",
+                    task.id, task.title, capability,
+                )
+                return capability
+        logger.warning(
+            "_resolve_task_capability: NO MATCH for task=%s title=%s, dag_titles=%s",
+            task.id, task.title, [(td.get("id"), td.get("title")) for td in task_dag],
+        )
         return "code"
 
     def _capability_to_agent_role(self, capability: str) -> AgentRole:
@@ -428,37 +358,3 @@ class ExecutingHandler(BasePhaseHandler):
             "data": AgentRole.CODER,
         }
         return mapping.get(capability, AgentRole.CODER)
-
-    async def _run_in_sandbox(
-        self, session_id: str, artifacts: list[dict], pending: list[dict],
-    ) -> list[dict]:
-        """对可执行代码制品在沙箱中运行。"""
-        executable_langs = {"python", "py", "javascript", "js", "typescript", "ts"}
-        results = []
-        for a in artifacts:
-            lang = a.get("language", "")
-            if lang not in executable_langs:
-                continue
-            code = a.get("modified_content") or a.get("content", "")
-            if len(code) < 20:
-                continue
-            try:
-                from app.core.sandbox.manager import SandboxManager
-                sm = SandboxManager(session_id)
-                result = await sm.auto_fix_loop(
-                    code, lang, a.get("file_path", ""),
-                )
-                results.append({
-                    "file": a.get("file_path", ""),
-                    "ok": result.get("ok", False),
-                    "message": result.get("output", {}).get("stdout", "")[:200] if result.get("ok") else "",
-                    "error": result.get("error", "")[:200] if not result.get("ok") else "",
-                })
-            except Exception as e:
-                logger.warning("Sandbox 执行失败: %s", e)
-                results.append({
-                    "file": a.get("file_path", ""),
-                    "ok": False,
-                    "error": str(e)[:200],
-                })
-        return results

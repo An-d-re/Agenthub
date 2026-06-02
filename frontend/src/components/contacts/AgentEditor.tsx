@@ -96,7 +96,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
       if (res.ok) {
         const data = await res.json();
         if (editAgent) {
-          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
+          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, systemPrompt: data.system_prompt, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
         } else {
           addAgent({ id: data.id, name: data.name, avatarUrl: data.avatar_url || "", roleType: data.role_type, adapterType: data.adapter_type, capabilityTags: data.capability_tags || [], isDeletable: data.is_deletable });
         }

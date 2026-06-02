@@ -68,6 +68,7 @@ export function LeftSidebar() {
       setAgents((data as Record<string,unknown>[]).map(a => ({
         id: a.id as string, name: a.name as string, avatarUrl: (a.avatar_url as string) || "",
         roleType: a.role_type as string, adapterType: a.adapter_type as string,
+        systemPrompt: (a.system_prompt as string) || "",
         capabilityTags: (a.capability_tags as string[]) || [],
         isDeletable: a.is_deletable as boolean,
       })));
@@ -142,7 +143,7 @@ export function LeftSidebar() {
   const handleContextMenu = (e: React.MouseEvent, agentId: string) => {
     e.preventDefault();
     const agent = agents.find(a => a.id === agentId);
-    if (!agent?.isDeletable) return;
+    if (!agent) return;
     setContextMenu({ x: e.clientX, y: e.clientY, agentId });
   };
 
@@ -180,7 +181,7 @@ export function LeftSidebar() {
   const bottomBtn = (() => {
     switch (tab) {
       case "agents": return { label: "+ 新建助手", onClick: handleNewAgent, disabled: false };
-      case "groups": return { label: "+ 新建群聊", onClick: handleNewGroup, disabled: agents.length < 2 };
+      case "groups": return { label: "+ 新建群聊", onClick: handleNewGroup, disabled: false };
       case "topics": return selectedContactId
         ? { label: "+ 新建话题", onClick: handleNewTopic, disabled: false }
         : { label: "请先选择一个助手", onClick: () => { setTab("agents"); }, disabled: true };
@@ -426,7 +427,9 @@ export function LeftSidebar() {
       {contextMenu && (
         <div className="fixed z-50 bg-[var(--bg-primary)] rounded-xl shadow-lg border border-[var(--border)] py-1 w-36 animate-fade-in" style={{ left: contextMenu.x, top: contextMenu.y }}>
           <button onClick={handleEditAgent} className="w-full text-left px-4 py-2.5 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors">编辑</button>
-          <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
+          {agents.find(a => a.id === contextMenu.agentId)?.roleType !== "system" && (
+            <button onClick={handleDeleteAgent} className="w-full text-left px-4 py-2.5 text-[14px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 transition-colors">删除</button>
+          )}
         </div>
       )}
     </div>

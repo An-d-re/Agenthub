@@ -199,6 +199,7 @@ export function useWebSocket(sessionId: string | null) {
             capabilityTags: p.capability_tags || [],
             isDeletable: p.is_deletable || false,
           });
+          useChatStore.getState().addSessionAgent(msg.session_id || sessionId, p.id);
         }
       } catch (e) {
         console.error("WebSocket 消息解析失败:", e);
