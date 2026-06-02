@@ -27,6 +27,17 @@ class Base(DeclarativeBase):
     pass
 
 
+async def _migrate_existing_tables(conn):
+    """为已有表补全缺失列，防止模型变更后 create_all 不更新已有表。"""
+    import sqlite3
+    # Agent: is_temp, encrypted_api_key (added after initial schema)
+    existing = {r[1] for r in (await conn.execute(text("PRAGMA table_info(agents)"))).fetchall()}
+    if "is_temp" not in existing:
+        await conn.execute(text("ALTER TABLE agents ADD COLUMN is_temp BOOLEAN DEFAULT 0"))
+    if "encrypted_api_key" not in existing:
+        await conn.execute(text("ALTER TABLE agents ADD COLUMN encrypted_api_key TEXT"))
+
+
 async def init_db():
     """Create all tables on startup, seed default agents if empty."""
     async with engine.begin() as conn:
@@ -34,6 +45,7 @@ async def init_db():
         # 确保 WAL 模式已启用（兜底，即使 connect 事件未触发）
         await conn.execute(text("PRAGMA journal_mode=WAL"))
         await conn.execute(text("PRAGMA busy_timeout=30000"))
+        await _migrate_existing_tables(conn)
 
     # Seed default agents if DB is empty
     from sqlalchemy import select, func

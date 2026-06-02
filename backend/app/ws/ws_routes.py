@@ -69,9 +69,7 @@ async def websocket_endpoint(
         finally:
             await manager.disconnect(client_id)
             # 无客户端连接此 session 时清理 EventBus 队列
-            remaining = any(
-                sid == session_id for sid in manager._client_sessions.values()
-            )
+            remaining = manager.has_session_clients(session_id)
             if not remaining:
                 event_bus.unsubscribe(session_id)
 
@@ -159,6 +157,17 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
                 await Orchestrator(session_id).handle_message(content, mentions=mentions)
             except Exception as e:
                 logger.exception("Orchestrator task CRASH session=%s: %s", session_id, e)
+                await event_bus.publish(session_id, {
+                    "type": "chat.message",
+                    "session_id": session_id,
+                    "payload": {
+                        "id": f"error-{message.id}",
+                        "role": "system",
+                        "content": "任务处理失败，请重试或联系管理员。",
+                        "message_type": "system",
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                })
         asyncio.create_task(_run_orch())
     else:
         asyncio.create_task(_trigger_agent(session_id, content))

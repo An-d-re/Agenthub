@@ -48,6 +48,9 @@ class ConnectionManager:
     def active_clients(self) -> dict[str, WebSocket]:
         return {cid: ws for cid, ws in self._connections.items()}
 
+    def has_session_clients(self, session_id: str) -> bool:
+        return any(sid == session_id for sid in self._client_sessions.values())
+
     # ── send ───────────────────────────────────────────────
 
     async def send_personal(self, message: dict[str, Any], client_id: str):

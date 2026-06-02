@@ -3,6 +3,7 @@
 顺序不可变：ContextSummarizer → LoopDetector → SubagentLimiter
 """
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -227,27 +228,15 @@ class SubagentLimiter(BaseMiddleware):
     MAX_CONCURRENT = 3
 
     def __init__(self):
-        self._semaphores: dict[str, "asyncio.Semaphore"] = {}
+        self._semaphores: dict[str, asyncio.Semaphore] = {}
 
     async def process(self, ctx: MiddlewareContext) -> MiddlewareContext:
-        import asyncio
-
         sid = ctx.session_id
         if sid not in self._semaphores:
             self._semaphores[sid] = asyncio.Semaphore(self.MAX_CONCURRENT)
 
         sem = self._semaphores[sid]
         if sem.locked():
-            logger.info("SubagentLimiter: session %s at concurrency limit (%d), waiting...",
-                        sid, self.MAX_CONCURRENT)
-
-        # 不阻塞 middleware 链 — 只是标记如果超出限制则排队
-        # 实际并发控制由 orchestrator 的调度逻辑完成
-        # 这里只做检测和日志
-        if sem.locked():
-            logger.info("SubagentLimiter: session %s 已满 %d 并发, 当前任务将排队",
-                        sid, self.MAX_CONCURRENT)
-            # 通知前端
             await event_bus.publish(sid, {
                 "type": "subagent.queue",
                 "session_id": sid,
