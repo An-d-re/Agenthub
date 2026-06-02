@@ -14,19 +14,21 @@ class EventBus:
 
     def __init__(self):
         self._queues: dict[str, asyncio.Queue] = {}
+        self._lock = asyncio.Lock()
 
     async def subscribe(self, session_id: str) -> asyncio.Queue:
-        # 始终创建新队列，避免重连时收到过期事件
-        if session_id in self._queues:
-            old = self._queues[session_id]
-            # 排空旧队列
-            while not old.empty():
-                try:
-                    old.get_nowait()
-                except asyncio.QueueEmpty:
-                    break
-        self._queues[session_id] = asyncio.Queue(maxsize=1000)
-        return self._queues[session_id]
+        async with self._lock:
+            # 始终创建新队列，避免重连时收到过期事件
+            if session_id in self._queues:
+                old = self._queues[session_id]
+                # 排空旧队列
+                while not old.empty():
+                    try:
+                        old.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+            self._queues[session_id] = asyncio.Queue(maxsize=1000)
+            return self._queues[session_id]
 
     def unsubscribe(self, session_id: str):
         self._queues.pop(session_id, None)

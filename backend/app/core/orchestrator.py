@@ -44,6 +44,7 @@ class Orchestrator:
 
     _locks: dict[str, asyncio.Lock] = {}
     _stop_events: dict[str, asyncio.Event] = {}
+    _init_lock = asyncio.Lock()
 
     def __init__(self, session_id: str):
         self.session_id = session_id
@@ -54,8 +55,9 @@ class Orchestrator:
 
     @classmethod
     def stop_session(cls, session_id: str) -> None:
-        event = cls._stop_events.setdefault(session_id, asyncio.Event())
-        event.set()
+        if session_id not in cls._stop_events:
+            cls._stop_events[session_id] = asyncio.Event()
+        cls._stop_events[session_id].set()
 
     @classmethod
     def resume_session(cls, session_id: str) -> None:
@@ -76,7 +78,10 @@ class Orchestrator:
     async def handle_message(self, user_message: str, mentions: Optional[list[str]] = None) -> None:
         logger.info("Orchestrator.handle_message START session=%s msg=%s", self.session_id, user_message[:50])
         try:
-            lock = Orchestrator._locks.setdefault(self.session_id, asyncio.Lock())
+            async with Orchestrator._init_lock:
+                if self.session_id not in Orchestrator._locks:
+                    Orchestrator._locks[self.session_id] = asyncio.Lock()
+                lock = Orchestrator._locks[self.session_id]
             async with lock:
                 await self._handle_message_locked(user_message, mentions or [])
             logger.info("Orchestrator.handle_message DONE session=%s", self.session_id)
