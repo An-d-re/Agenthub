@@ -139,8 +139,7 @@ async def _handle_chat_send(session_id: str, client_id: str, payload: dict):
     if session_type == "group":
         from app.core.orchestrator import Orchestrator
         # 检查锁状态：如果锁被占用，立即发排队通知
-        lock = Orchestrator._locks.get(session_id)
-        if lock and lock.locked():
+        if Orchestrator.is_locked(session_id):
             await event_bus.publish(session_id, {
                 "type": "chat.message",
                 "session_id": session_id,

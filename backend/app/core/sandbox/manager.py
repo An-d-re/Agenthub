@@ -41,12 +41,27 @@ class SandboxManager:
         return self._docker_available
 
     def _check_docker(self) -> bool:
+        """同步检测 Docker（仅在非异步上下文调用）。"""
         import subprocess
         try:
             result = subprocess.run(
                 ["docker", "info"], capture_output=True, timeout=5,
             )
             return result.returncode == 0
+        except Exception:
+            return False
+
+    async def _check_docker_async(self) -> bool:
+        """异步检测 Docker，不阻塞 event loop。"""
+        import asyncio as _asyncio
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                "docker", "info",
+                stdout=_asyncio.subprocess.DEVNULL,
+                stderr=_asyncio.subprocess.DEVNULL,
+            )
+            await _asyncio.wait_for(proc.wait(), timeout=5)
+            return proc.returncode == 0
         except Exception:
             return False
 

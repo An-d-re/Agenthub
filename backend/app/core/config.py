@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "AgentHub"
-    debug: bool = True
+    debug: bool = False
 
     # Database (SQLite)
     database_url: str = "sqlite+aiosqlite:///./data/agenthub.db"

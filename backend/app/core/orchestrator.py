@@ -78,6 +78,15 @@ class Orchestrator:
     def _check_stop(self) -> bool:
         return self.is_session_stopped(self.session_id)
 
+    @classmethod
+    def is_locked(cls, session_id: str) -> bool:
+        lock = cls._locks.get(session_id)
+        return lock is not None and lock.locked()
+
+    @classmethod
+    def get_stop_event(cls, session_id: str) -> asyncio.Event | None:
+        return cls._stop_events.get(session_id)
+
     # ── 公开入口 ──────────────────────────────────────────────
 
     async def handle_message(self, user_message: str, mentions: Optional[list[str]] = None) -> None:

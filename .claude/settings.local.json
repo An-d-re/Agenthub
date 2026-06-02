@@ -64,7 +64,21 @@
       "Bash(git stash *)",
       "Bash(python -c \"import os; os.remove\\(r'C:\\\\Users\\\\xlx\\\\projects\\\\agent_hub\\\\backend\\\\data\\\\agenthub.db'\\)\")",
       "Bash(python *)",
-      "Bash(rm -rf \"C:\\\\Users\\\\xlx\\\\projects\\\\agent_hub\\\\frontend\\\\.next\")"
+      "Bash(rm -rf \"C:\\\\Users\\\\xlx\\\\projects\\\\agent_hub\\\\frontend\\\\.next\")",
+      "Bash(pkill -f uvicorn)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload-exclude \"workspaces/*\" --reload-exclude \"data/*\")",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://localhost:3000)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl *)",
+      "Bash(grep -o '\\\\.bg-\\\\\\\\\\\\[var')",
+      "Bash(grep -c '\\\\.w-\\\\\\\\\\\\[240px\\\\\\\\\\\\]')",
+      "Bash(grep -o '\\\\.[a-zA-Z0-9_\\\\\\\\\\\\[\\\\]\\\\\\(\\\\\\)-]*flex[a-zA-Z0-9_\\\\\\\\\\\\[\\\\]\\\\\\(\\\\\\)-]*{')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

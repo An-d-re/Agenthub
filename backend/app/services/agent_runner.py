@@ -89,7 +89,7 @@ async def run_agent_reply(session_id: str, user_message: str):
                     await event_bus.publish(session_id, {
                         "type": "chat.stream.reasoning",
                         "session_id": session_id,
-                        "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": 0},
+                        "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": reason_count},
                     })
                 elif token.type == "content":
                     full_content += token.text
@@ -206,7 +206,7 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
                     await event_bus.publish(session_id, {
                         "type": "chat.stream.reasoning",
                         "session_id": session_id,
-                        "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": 0},
+                        "payload": {"message_id": agent_msg_id, "reasoning_id": f"reasoning-{agent_msg_id}", "token": token.text, "sequence": reason_count},
                     })
                 elif token.type == "content":
                     full_content += token.text

@@ -357,7 +357,7 @@ class BasePhaseHandler:
     def _get_stop_event(session_id: str) -> Optional[asyncio.Event]:
         """获取 session 的停止信号，供流式调用中检查。"""
         from app.core.orchestrator import Orchestrator
-        return Orchestrator._stop_events.get(session_id)
+        return Orchestrator.get_stop_event(session_id)
 
     async def _stream_agent_response(
         self, db: AsyncSession, session_id: str,
