@@ -78,7 +78,13 @@
       "Bash(grep -c '\\\\.w-\\\\\\\\\\\\[240px\\\\\\\\\\\\]')",
       "Bash(grep -o '\\\\.[a-zA-Z0-9_\\\\\\\\\\\\[\\\\]\\\\\\(\\\\\\)-]*flex[a-zA-Z0-9_\\\\\\\\\\\\[\\\\]\\\\\\(\\\\\\)-]*{')",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(pkill -f node)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I{} taskkill //F //PID {})",
+      "Bash(uvicorn app.main:app --host 0.0.0.0 --port 8000 \"--reload-exclude\" \"workspaces/*\" \"--reload-exclude\" \"data/*\")",
+      "Bash(taskkill //F //IM uvicorn.exe)",
+      "Bash(PYTHONIOENCODING=utf-8 python test_ws3.py)"
     ]
   }
 }

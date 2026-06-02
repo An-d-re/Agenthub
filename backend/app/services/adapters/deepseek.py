@@ -150,7 +150,10 @@ class DeepSeekAdapter(BaseAdapter):
         task_desc = task.get("description", "")
         task_prompt = (
             f"当前任务：{task_title}\n任务描述：{task_desc}\n\n"
-            "请完成上述任务。使用工具写代码、运行测试，验证通过后给出最终总结。"
+            "CRITICAL: You MUST use the write_file tool to create actual files. "
+            "Do NOT just describe what to build — actually build it. "
+            "Use function calling to write real code files, then verify your work. "
+            "Only write a summary AFTER you have successfully created and verified the files."
         )
 
         system_prompt = context.config.get("system_prompt", "")
