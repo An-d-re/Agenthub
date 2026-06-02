@@ -179,7 +179,9 @@ class DeepSeekAdapter(BaseAdapter):
 
         # ── ReAct 工具调用循环 ──────────────────────────────
         for iteration in range(self.MAX_TOOL_ITERATIONS):
-            resp = await self._call_with_retry(messages, tools)
+            # 首轮强制使用工具，后续自动选择
+            tc_mode = "required" if iteration == 0 else "auto"
+            resp = await self._call_with_retry(messages, tools, tool_choice=tc_mode)
             if resp is None:
                 return AgentResponse(content="[错误：任务执行失败]")
 
@@ -274,8 +276,8 @@ class DeepSeekAdapter(BaseAdapter):
             tool_calls=all_tool_calls,
         )
 
-    async def _call_with_retry(self, messages: list[dict], tools: list[dict] | None):
-        """带重试的 API 调用。"""
+    async def _call_with_retry(self, messages: list[dict], tools: list[dict] | None, tool_choice: str = "auto"):
+        """带重试的 API 调用。tool_choice: auto | required | none"""
         for attempt, delay in enumerate(RETRY_DELAYS):
             try:
                 kwargs = {
@@ -286,7 +288,7 @@ class DeepSeekAdapter(BaseAdapter):
                 }
                 if tools:
                     kwargs["tools"] = tools
-                    kwargs["tool_choice"] = "auto"
+                    kwargs["tool_choice"] = tool_choice
                 return await self._client.chat.completions.create(**kwargs)
             except Exception as e:
                 logger.warning("DeepSeek execute_task 第 %d 次尝试失败: %s", attempt + 1, e)

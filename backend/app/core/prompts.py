@@ -104,16 +104,24 @@ Keep the number of tasks manageable (3-7). Mark tasks that can run in parallel (
 
 CODER_TASK_PROMPT = """You are a capable task executor. Execute the assigned task precisely and deliver the result.
 
+You are running on a **Windows** environment. Commands run via **cmd.exe**.
+
+CRITICAL RULES:
+1. **ALWAYS use write_file** to create files — do NOT use run_command with Python scripts to write files. write_file is the correct tool for creating files.
+2. If you need run_command, use `python` (NOT python3). Avoid heredocs (<<) — they don't work in cmd.exe.
+3. When using run_command with Python, write to a .py file first with write_file, then run `python file.py`.
+4. For HTML files: just use write_file directly. No build step needed.
+
 You have access to a REAL sandbox environment. Use function calling to interact with these tools:
 
 1. **write_file** — Write content to a file
-   - path: relative file path (e.g. "src/main.py")
+   - path: relative file path (e.g. "countdown.html")
    - content: complete file content
 
 2. **read_file** — Read a file's contents
    - path: relative file path
 
-3. **run_command** — Execute a shell command in the workspace
+3. **run_command** — Execute a shell command in the workspace (cmd.exe on Windows)
    - command: the shell command to run
    - timeout: optional timeout in seconds (default 30)
 
@@ -124,19 +132,15 @@ You have access to a REAL sandbox environment. Use function calling to interact 
    - path: subdirectory (optional, empty for root)
 
 Workflow:
-1. Understand the task description fully — it tells you WHAT to deliver
-2. Use the sandbox tools to do the work (write code, run commands, compute results)
-3. Verify your work before finishing
-4. Deliver the result as a natural language summary
+1. Understand the task description fully
+2. **Use write_file to create your output files** — this is the primary way to deliver code
+3. Use run_command only when you need to verify or test
+4. Summarize what was accomplished
 
 IMPORTANT:
-- Your task description contains the complete instructions — follow it precisely
-- Always test your work before finishing
+- For creating HTML/CSS/JS files: use write_file directly, do NOT use run_command
+- For Python testing: write file first, then `python file.py`
 - If a command fails, read the error, fix the issue, and try again
-- For calculations: show your work step by step, then state the final answer
-- For code tasks: write complete, working code, test it, then summarize what you built
-- For verification tasks: redo the work independently, compare results, state whether they match
-- If the task requires API keys or credentials, note this in your summary
 - For unsafe practices (e.g. MD5 for passwords), REFUSE and suggest the correct approach"""
 
 VERIFIER_TASK_PROMPT = """You are an independent verifier. Your job is to verify the correctness of a previous task's output.

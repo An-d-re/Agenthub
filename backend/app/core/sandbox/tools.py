@@ -148,10 +148,15 @@ async def read_file(path: str, workspace_dir: str) -> dict:
 )
 async def run_command(command: str, workspace_dir: str, timeout: int = 30) -> dict:
     import asyncio
+    import platform
 
     danger = _check_dangerous(command)
     if danger:
         return {"ok": False, "error": danger}
+
+    # Windows 兼容：替换 python3 → python
+    if platform.system() == "Windows":
+        command = command.replace("python3", "python")
 
     capped_timeout = min(timeout, MAX_TIMEOUT)
 
