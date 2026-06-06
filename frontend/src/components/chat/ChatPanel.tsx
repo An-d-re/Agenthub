@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
 import { useAgentStore } from "@/stores/agentStore";
 import { API_BASE, EMPTY_ARRAY } from "@/lib/constants";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
+import { AgentEditor } from "@/components/contacts/AgentEditor";
 import { cn } from "@/lib/utils";
 
 export function ChatPanel() {
@@ -39,6 +40,15 @@ export function ChatPanel() {
   const [messageSearch, setMessageSearch] = useState("");
 
   const [sendError, setSendError] = useState(false);
+
+  // 成员管理内联编辑 Prompt
+  const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null);
+  const [editingPrompt, setEditingPrompt] = useState("");
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  // Agent 搜索 + 新建
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAgentEditor, setShowAgentEditor] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const handleSend = (content: string, quoteMessageId?: string) => {
     const ok = sendMessage(content, quoteMessageId);
@@ -113,6 +123,46 @@ export function ChatPanel() {
     useChatStore.getState().removeSessionAgent(activeSessionId, agentId);
     refreshSessions();
   };
+
+  const handleSavePrompt = async (agentId: string) => {
+    setSavingPrompt(true);
+    try {
+      const agent = agents.find(a => a.id === agentId);
+      if (!agent) return;
+      await fetch(`${API_BASE}/api/agents/${agentId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: agent.name,
+          role_type: agent.roleType,
+          adapter_type: agent.adapterType,
+          system_prompt: editingPrompt,
+          skills: [],
+          capability_tags: agent.capabilityTags || [],
+          avatar_url: agent.avatarUrl,
+        }),
+      });
+      useAgentStore.getState().setAgents(agents.map(a => a.id === agentId ? { ...a, systemPrompt: editingPrompt } : a));
+      setExpandedPromptId(null);
+    } catch { /* ignore */ }
+    finally { setSavingPrompt(false); }
+  };
+
+  const handleAgentCreated = async (agentId: string) => {
+    if (!activeSessionId) return;
+    await fetch(`${API_BASE}/api/sessions/${activeSessionId}/agents/${agentId}`, { method: "POST" });
+    useChatStore.getState().addSessionAgent(activeSessionId, agentId);
+    refreshSessions();
+  };
+
+  // 过滤可添加的 Agent：不在群中、匹配搜索词（名称或能力标签）
+  const availableAgents = agents.filter(a => !sessionAgents.includes(a.id));
+  const filteredAgents = searchQuery.trim()
+    ? availableAgents.filter(a => {
+        const q = searchQuery.trim().toLowerCase();
+        return a.name.toLowerCase().includes(q)
+          || (a.capabilityTags || []).some(t => t.toLowerCase().includes(q));
+      })
+    : availableAgents;
 
   const refreshSessions = async () => {
     const r = await fetch(`${API_BASE}/api/sessions`);
@@ -250,40 +300,115 @@ export function ChatPanel() {
       <MessageInput onSend={handleSend} disabled={false} isThinking={effectiveThinking} onStop={() => sendSessionControl("stop")} />
 
       {showMembers && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>setShowMembers(false)}>
-          <div className="bg-[var(--bg-primary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e=>e.stopPropagation()}>
-            <h3 className="text-[17px] font-semibold mb-4">群成员</h3>
-            <div className="space-y-2 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={()=>{setShowMembers(false); setExpandedPromptId(null); setSearchQuery("");}}>
+          <div className="bg-[var(--bg-primary)] rounded-2xl shadow-lg p-6 w-[400px] max-h-[80vh] overflow-y-auto animate-spring" onClick={e=>e.stopPropagation()}>
+            <h3 className="text-[17px] font-semibold mb-1">群成员</h3>
+            <p className="text-[11px] text-[var(--text-tertiary)] mb-4">点击名称可编辑 Agent 的 Prompt</p>
+            <div className="space-y-1 mb-4">
               {sessionAgents.map(aid => {
                 const agent = agents.find(a => a.id === aid);
+                const isExpanded = expandedPromptId === aid;
                 return (
-                  <div key={aid} className="flex items-center justify-between py-1.5">
-                    <span className="text-[14px]">{agent?.name || aid.slice(0,8)}</span>
-                    {sessionAgents.length > 1 && agent?.roleType !== "system" && (
-                      <button onClick={()=>handleRemoveMember(aid)}
-                        className="text-[12px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 px-3 py-1 rounded-lg transition-colors">移除</button>
+                  <div key={aid}>
+                    <div className="flex items-center justify-between py-1.5">
+                      <button
+                        onClick={() => {
+                          if (isExpanded) { setExpandedPromptId(null); return; }
+                          setExpandedPromptId(aid);
+                          setEditingPrompt(agent?.systemPrompt || "");
+                        }}
+                        className="text-[14px] font-medium hover:text-[var(--accent)] transition-colors text-left flex items-center gap-1.5 group"
+                      >
+                        {agent?.name || aid.slice(0,8)}
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-tertiary)]"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      {sessionAgents.length > 1 && agent?.roleType !== "system" && (
+                        <button onClick={()=>handleRemoveMember(aid)}
+                          className="text-[12px] text-[var(--danger)] hover:bg-red-50 dark:hover:bg-red-50/20 px-3 py-1 rounded-lg transition-colors">移除</button>
+                      )}
+                    </div>
+                    {isExpanded && (
+                      <div className="mb-2 pl-1">
+                        <textarea
+                          value={editingPrompt}
+                          onChange={e => setEditingPrompt(e.target.value.slice(0, 2000))}
+                          className="w-full px-3 py-2 rounded-[10px] bg-[var(--bg-secondary)] border border-[var(--border)] outline-none text-[13px] resize-y min-h-[80px] leading-relaxed focus:ring-2 focus:ring-[var(--accent)]/20"
+                          placeholder="输入 System Prompt…"
+                          autoFocus
+                        />
+                        <div className="flex items-center justify-between mt-1.5">
+                          <span className="text-[11px] text-[var(--text-tertiary)]">{editingPrompt.length}/2000</span>
+                          <div className="flex gap-2">
+                            <button onClick={() => setExpandedPromptId(null)}
+                              className="text-[12px] px-3 py-1 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors">取消</button>
+                            <button onClick={() => handleSavePrompt(aid)} disabled={savingPrompt}
+                              className="text-[12px] px-3 py-1 rounded-lg bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50">
+                              {savingPrompt ? "保存中…" : "保存"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
             <div className="border-t border-[var(--border)] pt-4">
-              <p className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-2">添加 Agent</p>
-              <div className="space-y-1">
-                {agents.filter(a => !sessionAgents.includes(a.id)).map(a => (
-                  <button key={a.id} onClick={()=>handleAddMember(a.id)}
-                    className="w-full text-left px-3 py-2 rounded-[12px] text-[14px] hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2">
-                    <span className="text-lg">{a.adapterType==="deepseek"?"🧠":a.adapterType==="anthropic"?"✨":"🔧"}</span>
-                    {a.name}
-                  </button>
-                ))}
+              <p className="text-[12px] text-[var(--text-secondary)] mb-2">添加 Agent</p>
+              <div className="relative">
+                <div className="flex items-center gap-2 bg-[var(--bg-secondary)] rounded-xl px-3 py-2 ring-1 ring-[var(--border)] focus-within:ring-[var(--accent)]/30 transition-all">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                  <input
+                    ref={searchInputRef}
+                    className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[var(--text-tertiary)]"
+                    placeholder="搜索 Agent 名称或能力标签…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  )}
+                </div>
+                <div className="mt-1 max-h-[160px] overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-sm">
+                  {filteredAgents.length > 0 ? (
+                    filteredAgents.map(a => (
+                      <button key={a.id} onClick={() => { handleAddMember(a.id); setSearchQuery(""); }}
+                        className="w-full text-left px-3 py-2 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2 first:rounded-t-xl last:rounded-b-xl">
+                        <span className="text-base">{a.adapterType==="deepseek"?"🧠":a.adapterType==="anthropic"?"✨":"🔧"}</span>
+                        <div className="flex-1 min-w-0">
+                          <span>{a.name}</span>
+                          {(a.capabilityTags || []).length > 0 && (
+                            <span className="ml-2 text-[11px] text-[var(--text-tertiary)]">{(a.capabilityTags || []).slice(0, 3).join(" · ")}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-3 text-[13px] text-[var(--text-tertiary)] text-center">
+                      {availableAgents.length === 0 ? "所有 Agent 已在群中" : "无匹配的 Agent"}
+                    </div>
+                  )}
+                </div>
               </div>
+              <button onClick={() => setShowAgentEditor(true)}
+                className="w-full mt-2 py-2 rounded-xl border border-dashed border-[var(--border)] text-[13px] text-[var(--text-secondary)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors flex items-center justify-center gap-1.5">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                新建 Agent
+              </button>
             </div>
-            <button onClick={()=>setShowMembers(false)}
+            <button onClick={()=>{setShowMembers(false); setExpandedPromptId(null); setSearchQuery("");}}
               className="w-full mt-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[var(--accent-hover)] transition-colors">完成</button>
           </div>
         </div>
       )}
+
+      <AgentEditor
+        open={showAgentEditor}
+        onClose={() => setShowAgentEditor(false)}
+        onCreated={handleAgentCreated}
+      />
     </div>
   );
 }

@@ -518,13 +518,13 @@ class BasePhaseHandler:
                 try:
                     result = json.loads(cleaned[start:end])
                     if isinstance(result, list):
-                        return result
+                        return [item for item in result if item is not None]
                 except json.JSONDecodeError:
                     pass
         try:
             result = json.loads(cleaned)
             if isinstance(result, list):
-                return result
+                return [item for item in result if item is not None]
         except json.JSONDecodeError:
             pass
         return None

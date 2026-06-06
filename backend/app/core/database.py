@@ -36,6 +36,10 @@ async def _migrate_existing_tables(conn):
         await conn.execute(text("ALTER TABLE agents ADD COLUMN is_temp BOOLEAN DEFAULT 0"))
     if "encrypted_api_key" not in existing:
         await conn.execute(text("ALTER TABLE agents ADD COLUMN encrypted_api_key TEXT"))
+    # Plan: clarify_round (added after initial schema)
+    existing_plans = {r[1] for r in (await conn.execute(text("PRAGMA table_info(plans)"))).fetchall()}
+    if "clarify_round" not in existing_plans:
+        await conn.execute(text("ALTER TABLE plans ADD COLUMN clarify_round INTEGER DEFAULT 0"))
 
 
 async def init_db():

@@ -2,7 +2,9 @@
 
 import json
 import logging
+import uuid
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 from app.core.agent_factory import match_task_to_agent
 from app.core.phases.base import BasePhaseHandler, PhaseContext
 from app.core.prompts import PLANNER_DECOMPOSE_PROMPT
@@ -12,13 +14,20 @@ from app.services.adapters.base import AgentContext, AgentRole
 
 logger = logging.getLogger(__name__)
 
+_MODULE_LOADED = True
+
 
 class ConfirmedHandler(BasePhaseHandler):
     """分解任务为 DAG，等待用户确认执行者分配后推进到 executing。"""
 
     async def execute(self, ctx: PhaseContext) -> str | None:
         existing_dag = ctx.plan.task_dag or []
-
+        logger.info(
+            "DIAG: execute() session=%s task_dag_type=%s existing_dag_len=%s going_to=%s",
+            ctx.plan.session_id, type(ctx.plan.task_dag).__name__,
+            len(existing_dag) if isinstance(existing_dag, list) else "N/A",
+            "_handle_feedback" if existing_dag else "_decompose",
+        )
         if existing_dag:
             return await self._handle_feedback(ctx)
         return await self._decompose(ctx)
@@ -76,7 +85,13 @@ class ConfirmedHandler(BasePhaseHandler):
         )
 
         task_dag = self._extract_json_array(content)
-        if not task_dag or not isinstance(task_dag, list) or len(task_dag) == 0:
+        task_dag = [td for td in (task_dag or []) if td is not None]
+        logger.info(
+            "_decompose: raw_content_len=%d, extracted_count=%d, items=%s",
+            len(content), len(task_dag),
+            [(td.get("id"), type(td).__name__) if isinstance(td, dict) else (str(td)[:40], type(td).__name__) for td in task_dag],
+        )
+        if not task_dag or len(task_dag) == 0:
             task_dag = [{
                 "id": "task-1", "title": ctx.plan.selected_approach or "实现需求",
                 "description": content[:500], "dependencies": [],
@@ -142,33 +157,45 @@ class ConfirmedHandler(BasePhaseHandler):
                     "match_reason": match.reason,
                 })
 
-        ctx.plan.task_dag = task_dag
-
-        # 创建 Task + TaskDependency 记录
+        # 创建 Task 记录（预生成 UUID 显式传入 id，避免 add() 后 id 为 None）
         id_map: dict[str, str] = {}
         for td in task_dag:
+            if not isinstance(td, dict):
+                logger.warning("_decompose: 跳过非 dict 的 task_dag 元素: %s", type(td).__name__)
+                continue
+            task_id = str(uuid.uuid4())
             task = Task(
+                id=task_id,
                 plan_id=ctx.plan.id,
-                title=td["title"],
+                title=td.get("title", "untitled"),
                 description=td.get("description", ""),
                 assigned_agent_id=td.get("assigned_agent_id"),
                 status="pending",
             )
             ctx.db.add(task)
-            await ctx.db.flush()
-            id_map[td["id"]] = task.id
-            td["_db_id"] = task.id
+            id_map[td.get("id", "")] = task_id
+            td["_db_id"] = task_id
 
+        # 创建 TaskDependency 记录
         for td in task_dag:
+            if not isinstance(td, dict):
+                continue
             for dep_id in td.get("dependencies", []):
                 dep_db_id = id_map.get(dep_id)
                 if dep_db_id:
                     dep = TaskDependency(
-                        task_id=id_map[td["id"]], depends_on_task_id=dep_db_id,
+                        task_id=id_map[td.get("id", "")], depends_on_task_id=dep_db_id,
                     )
                     ctx.db.add(dep)
 
+        # 在所有 _db_id 设置完成后赋值，并强制标记修改确保 JSON 持久化完整
+        ctx.plan.task_dag = task_dag
+        flag_modified(ctx.plan, "task_dag")
         await ctx.db.flush()
+        logger.info(
+            "_decompose: flushed plan task_dag ids=%s",
+            [(td.get("id"), td.get("_db_id", "?")[:8]) for td in task_dag if isinstance(td, dict)],
+        )
 
         # 全部任务已匹配现有 Agent → 自动确认，省去人工点击「确认执行」
         all_matched = all(td.get("assigned_agent_id") for td in task_dag)
@@ -213,12 +240,17 @@ class ConfirmedHandler(BasePhaseHandler):
         from app.core.agent_factory import create_temp_agent
 
         task_dag = ctx.plan.task_dag or []
-        id_map: dict[str, dict] = {td["id"]: td for td in task_dag}
+        id_map: dict[str, dict] = {td["id"]: td for td in task_dag if td is not None}
+
+        # 通过 title 匹配 Task（title 来自 Planner 输出，比 _db_id JSON 持久化更可靠）
+        result = await ctx.db.execute(select(Task).where(Task.plan_id == ctx.plan.id))
+        title_to_task: dict[str, Task] = {t.title: t for t in result.scalars().all()}
 
         logger.info(
-            "confirm_with_assignments: assignments=%s, dag_ids=%s",
+            "confirm_with_assignments: assignments=%s, dag_ids=%s, title_map_keys=%s",
             [{a.get("task_id"): a.get("agent_id") or "NEW"} for a in assignments],
             {td["id"]: td.get("required_capability", "?") for td in task_dag},
+            list(title_to_task.keys()),
         )
 
         for assign in assignments:
@@ -228,21 +260,20 @@ class ConfirmedHandler(BasePhaseHandler):
                 logger.warning("confirm_with_assignments: dag_id=%s NOT FOUND in id_map keys=%s", dag_id, list(id_map.keys()))
                 continue
 
+            db_task = title_to_task.get(td["title"])
+            if not db_task:
+                logger.warning("confirm_with_assignments: task NOT FOUND for dag_id=%s title=%s", dag_id, td.get("title"))
+                continue
+
             agent_id = assign.get("agent_id")
             if agent_id:
                 # 复用现有 Agent
-                db_task = await ctx.db.get(Task, td.get("_db_id", ""))
-                if db_task:
-                    db_task.assigned_agent_id = agent_id
-                    td["assigned_agent_id"] = agent_id  # 同步到内存 DAG
+                db_task.assigned_agent_id = agent_id
+                td["assigned_agent_id"] = agent_id  # 同步到内存 DAG
             else:
                 # 新建临时 Agent
                 adapter_type = assign.get("adapter_type", "deepseek")
                 api_key = assign.get("api_key")
-                db_task = await ctx.db.get(Task, td.get("_db_id", ""))
-                if not db_task:
-                    logger.warning("confirm_with_assignments: db_task NOT FOUND for dag_id=%s _db_id=%s", dag_id, td.get("_db_id"))
-                    continue
                 capability = td.get("required_capability", "code")
                 logger.info("confirm_with_assignments: creating temp agent for dag_id=%s capability=%s", dag_id, capability)
                 new_agent = await create_temp_agent(
@@ -250,8 +281,7 @@ class ConfirmedHandler(BasePhaseHandler):
                     capability, adapter_type, api_key,
                 )
                 td["assigned_agent_id"] = new_agent.id
-                if db_task:
-                    db_task.assigned_agent_id = new_agent.id
+                db_task.assigned_agent_id = new_agent.id
                 await self._send_system_message(
                     ctx.db, ctx.plan.session_id,
                     f"✨ 创建了临时 Agent「{new_agent.name}」（{adapter_type}）",

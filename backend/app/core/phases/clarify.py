@@ -64,8 +64,7 @@ class ClarifyHandler(BasePhaseHandler):
             )
             return None
 
-        task_dag = ctx.plan.task_dag or {}
-        clarify_round = task_dag.get("clarify_round", 0)
+        clarify_round = ctx.plan.clarify_round or 0
 
         # 轮次 1+：必须等用户说 ok/确认 才推进
         if clarify_round > 0:
@@ -73,6 +72,7 @@ class ClarifyHandler(BasePhaseHandler):
             if lower in ("确认", "confirm", "ok", "好的", "可以", "执行", "开始", "go", "yes", "是"):
                 ctx.plan.phase = "comparison"
                 ctx.plan.task_dag = {}
+                ctx.plan.clarify_round = 0
                 await self._send_system_message(
                     ctx.db, ctx.plan.session_id, "需求已明确，正在生成方案…",
                     pending_events=ctx.pending_events,
@@ -85,6 +85,7 @@ class ClarifyHandler(BasePhaseHandler):
             if complexity == "simple":
                 ctx.plan.phase = "comparison"
                 ctx.plan.task_dag = {}
+                ctx.plan.clarify_round = 0
                 await self._send_system_message(
                     ctx.db, ctx.plan.session_id, "需求已明确（简单任务），正在生成方案…",
                     pending_events=ctx.pending_events,
@@ -93,6 +94,7 @@ class ClarifyHandler(BasePhaseHandler):
 
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
+            ctx.plan.clarify_round = 0
             await self._send_system_message(
                 ctx.db, ctx.plan.session_id, "需求澄清已完成（已达最大轮次）。正在生成方案选项…",
                 pending_events=ctx.pending_events,
@@ -103,10 +105,17 @@ class ClarifyHandler(BasePhaseHandler):
             ctx.db, ctx.plan.session_id, "critic", ctx.mentions,
         )
         if not agent or not adapter:
+            clarify_round += 1
+            ctx.plan.clarify_round = clarify_round
             await self._send_system_message(
                 ctx.db, ctx.plan.session_id, "会话中没有可用的 Agent，请先添加 Agent。",
                 pending_events=ctx.pending_events,
             )
+            if clarify_round >= self.MAX_CLARIFY_ROUNDS:
+                ctx.plan.phase = "comparison"
+                ctx.plan.task_dag = {}
+                ctx.plan.clarify_round = 0
+                return "comparison"
             return None
 
         # 阶段进度提示
@@ -131,16 +140,18 @@ class ClarifyHandler(BasePhaseHandler):
         )
 
         clarify_round += 1
-        ctx.plan.task_dag = task_dag | {"clarify_round": clarify_round}
+        ctx.plan.clarify_round = clarify_round
 
         if clarify_round == 1 and self._critic_has_signaled_done(content):
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}
+            ctx.plan.clarify_round = 0
             return "comparison"
 
         if clarify_round >= self.MAX_CLARIFY_ROUNDS:
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}
+            ctx.plan.clarify_round = 0
             return "comparison"
 
         return None

@@ -1,5 +1,7 @@
 """AgentHub backend application."""
 
+import logging
+import logging.handlers
 from contextlib import asynccontextmanager
 
 from pathlib import Path
@@ -20,8 +22,30 @@ from app.core.database import init_db
 from app.ws.ws_routes import router as ws_router
 
 
+def _setup_orchestrator_log():
+    """配置编排器日志：同时输出到控制台和 backend/logs/orchestrator.log。"""
+    log_dir = Path(__file__).resolve().parent.parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "orchestrator.log"
+
+    orch_logger = logging.getLogger("app.core")
+    orch_logger.setLevel(logging.DEBUG)
+
+    # 避免重复添加 handler
+    if not any(isinstance(h, logging.handlers.RotatingFileHandler) for h in orch_logger.handlers):
+        fh = logging.handlers.RotatingFileHandler(
+            str(log_file), maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8",
+        )
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+        orch_logger.addHandler(fh)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _setup_orchestrator_log()
     await init_db()
     yield
 

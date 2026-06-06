@@ -70,6 +70,8 @@ class ExecutingHandler(BasePhaseHandler):
 
         id_map: dict[str, str] = {}
         for td in task_dag:
+            if td is None:
+                continue
             db_id = all_tasks.get(td["title"])
             if db_id:
                 id_map[td["id"]] = db_id
@@ -85,6 +87,8 @@ class ExecutingHandler(BasePhaseHandler):
 
         ready: list[tuple[dict, str]] = []
         for td in task_dag:
+            if td is None:
+                continue
             task_id = id_map.get(td["id"])
             if not task_id or statuses.get(task_id) != "pending":
                 continue
@@ -100,6 +104,12 @@ class ExecutingHandler(BasePhaseHandler):
                 ready.append((td, task_id))
 
         if not ready:
+            pending_count = sum(1 for s in statuses.values() if s == "pending")
+            logger.info(
+                "[%s] 调度: 无就绪任务 (总%d, pending=%d, done=%d)",
+                ctx.plan.session_id[:8], len(statuses), pending_count,
+                sum(1 for s in statuses.values() if s == "done"),
+            )
             return
 
         orch = ctx.orchestrator
@@ -110,10 +120,19 @@ class ExecutingHandler(BasePhaseHandler):
             )
             return
 
-        logger.info("并行执行 %d 个就绪任务", len(ready))
+        logger.info(
+            "[%s] 调度: 执行 %d 个就绪任务: %s",
+            ctx.plan.session_id[:8], len(ready),
+            [(td["id"], td["title"][:30]) for td, _ in ready],
+        )
+
+        # 缓存 session_id，commit 后 plan 的非主键属性会过期，不能直接访问
+        session_id = ctx.plan.session_id
 
         # 提交父 session 释放写锁
         await ctx.db.commit()
+        # 刷新 plan 对象，确保 task_dag 等非主键属性在后续递归调用中可用
+        await ctx.db.refresh(ctx.plan)
 
         async def run_one(task_id: str) -> None:
             async with async_session() as task_db:
@@ -133,13 +152,15 @@ class ExecutingHandler(BasePhaseHandler):
                     )
                 await task_db.commit()
 
-        await asyncio.gather(*[run_one(tid) for _, tid in ready])
-
-        ctx.db.expire_all()
+        try:
+            await asyncio.gather(*[run_one(tid) for _, tid in ready])
+        except Exception as e:
+            logger.exception("_execute_ready_tasks: gather 异常，%d 个任务中可能有失败的: %s", len(ready), e)
 
         if orch and hasattr(orch, '_check_stop') and orch._check_stop():
             return
-        if not await self._check_all_done(ctx.db, ctx.plan.session_id, ctx.plan, ctx.pending_events):
+        if not await self._check_all_done(ctx.db, session_id, ctx.plan, ctx.pending_events):
+            logger.info("_execute_ready_tasks: not all done, re-running for next batch")
             await self._execute_ready_tasks_from_db(ctx)
 
     async def _execute_single_task(
@@ -192,6 +213,10 @@ class ExecutingHandler(BasePhaseHandler):
         if not agent or not adapter:
             from app.core.agent_factory import create_temp_agent
             capability = self._resolve_task_capability(plan, task)
+            logger.info(
+                "_execute_single_task FALLBACK: creating temp agent for task=%s title=%s capability=%s",
+                task.id, task.title, capability,
+            )
             agent = await create_temp_agent(
                 db, session_id, task, capability, "deepseek",
             )
@@ -285,6 +310,10 @@ class ExecutingHandler(BasePhaseHandler):
             task.status = "done"
             task.completed_at = _utcnow()
             await db.flush()
+            logger.info(
+                "[%s] 任务完成: %s agent=%s result_len=%d",
+                session_id[:8], task.title[:40], agent.name, len(task.result or ""),
+            )
 
             await self._publish_task_update(session_id, task, "done", pending)
 
@@ -295,7 +324,10 @@ class ExecutingHandler(BasePhaseHandler):
             )
 
         except Exception as e:
-            logger.exception("任务执行失败: %s", e)
+            logger.error(
+                "[%s] 任务失败: %s agent=%s error=%s",
+                session_id[:8], task.title[:40], agent.name, str(e)[:200],
+            )
             task.error_message = str(e)
 
             if task.retry_count < (task.max_retries or self.MAX_TASK_RETRIES):
@@ -334,6 +366,8 @@ class ExecutingHandler(BasePhaseHandler):
         """从 DAG 中解析任务所需能力，匹配失败时回退到 'code'。"""
         task_dag = plan.task_dag or []
         for td in task_dag:
+            if td is None:
+                continue
             if td.get("_db_id") == str(task.id) or td.get("title") == task.title:
                 capability = td.get("required_capability", "code")
                 logger.info(
@@ -343,7 +377,7 @@ class ExecutingHandler(BasePhaseHandler):
                 return capability
         logger.warning(
             "_resolve_task_capability: NO MATCH for task=%s title=%s, dag_titles=%s",
-            task.id, task.title, [(td.get("id"), td.get("title")) for td in task_dag],
+            task.id, task.title, [(td.get("id"), td.get("title")) for td in task_dag if td is not None],
         )
         return "code"
 

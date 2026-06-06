@@ -203,6 +203,95 @@ async def remove_agent_from_session(session_id: str, agent_id: str, db: AsyncSes
     return {"ok": True}
 
 
+@router.get("/{session_id}/diagnostics")
+async def get_diagnostics(session_id: str, db: AsyncSession = Depends(get_db)):
+    """返回会话的完整诊断信息：Plan 阶段、DAG、Task 状态、Agent 清单。"""
+    from app.models.plan import Plan
+    from app.models.task import Task, TaskDependency
+
+    plan_result = await db.execute(
+        select(Plan).where(Plan.session_id == session_id)
+        .order_by(Plan.created_at.desc()).limit(1)
+    )
+    plan = plan_result.scalar_one_or_none()
+
+    if not plan:
+        return {"session_id": session_id, "plan": {"phase": "no_plan"}, "tasks": [], "agents": []}
+
+    task_result = await db.execute(select(Task).where(Task.plan_id == plan.id))
+    tasks = list(task_result.scalars().all())
+
+    dep_result = await db.execute(
+        select(TaskDependency).where(
+            TaskDependency.task_id.in_([t.id for t in tasks])
+        )
+    )
+    deps = dep_result.scalars().all()
+
+    agent_result = await db.execute(
+        select(SessionAgent).where(SessionAgent.session_id == session_id)
+    )
+    session_agents = agent_result.scalars().all()
+
+    agent_map: dict[str, Agent] = {}
+    if session_agents:
+        agents_result = await db.execute(
+            select(Agent).where(Agent.id.in_([sa.agent_id for sa in session_agents]))
+        )
+        agent_map = {a.id: a for a in agents_result.scalars().all()}
+
+    return {
+        "session_id": session_id,
+        "plan": {
+            "id": plan.id if plan else None,
+            "phase": plan.phase if plan else "no_plan",
+            "status": plan.status if plan else None,
+            "clarify_round": plan.clarify_round if plan else None,
+            "selected_approach": plan.selected_approach if plan else None,
+            "approaches": plan.approaches if plan else None,
+            "dag_length": len(plan.task_dag) if (plan and plan.task_dag) else 0,
+            "dag": [
+                {
+                    "id": td.get("id"),
+                    "title": td.get("title", ""),
+                    "required_capability": td.get("required_capability"),
+                    "assigned_agent_id": td.get("assigned_agent_id"),
+                    "dependencies": td.get("dependencies", []),
+                    "_db_id": td.get("_db_id"),
+                }
+                for td in (plan.task_dag or [])
+                if isinstance(td, dict)
+            ] if plan else [],
+        },
+        "tasks": [
+            {
+                "db_id": t.id,
+                "title": t.title,
+                "status": t.status,
+                "assigned_agent_id": t.assigned_agent_id,
+                "error_message": t.error_message,
+                "retry_count": t.retry_count,
+                "result_preview": (t.result or "")[:200] if t.result else None,
+            }
+            for t in tasks
+        ],
+        "dependencies": [
+            {"task_id": d.task_id, "depends_on": d.depends_on_task_id}
+            for d in deps
+        ],
+        "agents": [
+            {
+                "id": agent.id,
+                "name": agent.name,
+                "role_type": agent.role_type,
+                "is_temp": agent.is_temp,
+                "capability_tags": agent.capability_tags,
+            }
+            for agent in agent_map.values()
+        ],
+    }
+
+
 @router.get("/{session_id}/export", response_class=PlainTextResponse)
 async def export_session(session_id: str, db: AsyncSession = Depends(get_db)):
     """导出会话完整对话为 Markdown，保存到 test-cases/ 并返回下载。"""

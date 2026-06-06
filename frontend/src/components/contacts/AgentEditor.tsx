@@ -17,9 +17,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   editAgent?: { id: string; name: string; systemPrompt: string; skills: string[]; capabilityTags: string[]; avatarUrl: string } | null;
+  onCreated?: (agentId: string) => void;
 }
 
-export function AgentEditor({ open, onClose, editAgent }: Props) {
+export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
   const [name, setName] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
@@ -99,6 +100,7 @@ export function AgentEditor({ open, onClose, editAgent }: Props) {
           setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, systemPrompt: data.system_prompt, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
         } else {
           addAgent({ id: data.id, name: data.name, avatarUrl: data.avatar_url || "", roleType: data.role_type, adapterType: data.adapter_type, capabilityTags: data.capability_tags || [], isDeletable: data.is_deletable });
+          onCreated?.(data.id);
         }
         onClose();
       } else {

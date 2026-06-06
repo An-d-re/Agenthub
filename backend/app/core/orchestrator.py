@@ -141,11 +141,13 @@ class Orchestrator:
 
                 if phase in PHASE_REGISTRY:
                     handler = PHASE_REGISTRY[phase]
+                    logger.info("[%s] >>> 进入阶段: %s", self.session_id[:8], phase)
                     next_phase = await handler.execute(ctx)
                     self._pending_events.extend(pending)
 
                     # 自动推进循环：连续执行不需要用户交互的阶段
                     while next_phase and next_phase in PHASE_REGISTRY:
+                        logger.info("[%s] --> 自动推进: %s → %s", self.session_id[:8], plan.phase, next_phase)
                         plan.phase = next_phase
                         if next_phase == "executing":
                             exec_pending: list[dict] = []
@@ -175,6 +177,7 @@ class Orchestrator:
                     if len(user_message.strip()) > 5:
                         plan.phase = "clarify"
                         plan.task_dag = {}
+                        plan.clarify_round = 0
                         plan.approaches = None
                         msg = await self._persist_system_message(
                             db, "检测到新需求，重新开始工作流。",

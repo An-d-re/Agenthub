@@ -39,6 +39,7 @@ test-cases/
 
 # Test output
 backend/test_session_id.txt
+tests/test-output/
 
 # Staff notes (keep req.md in git)
 改进.md

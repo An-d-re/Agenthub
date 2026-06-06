@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.dialects.sqlite import CHAR as UUID
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,7 @@ class Plan(Base):
     phase = Column(String(20), default="clarify")  # clarify | comparison | confirmed | executing | done
     approaches = Column(JSON, nullable=True)  # [{name, summary, pros, cons, recommended}]
     selected_approach = Column(String(100), nullable=True)
+    clarify_round = Column(Integer, default=0)
     task_dag = Column(JSON, nullable=True)  # [{id, title, dependencies[], assigned_agent_id}]
     status = Column(String(20), default="active")
     created_at = Column(DateTime(timezone=True), default=_utcnow)
