@@ -67,9 +67,6 @@ class BaseAdapter(ABC):
     async def execute_task(self, context: AgentContext, task: dict) -> AgentResponse: ...
 
     @abstractmethod
-    async def review_result(self, context: AgentContext, original_task: dict, result: str) -> AgentResponse: ...
-
-    @abstractmethod
     async def get_capabilities(self) -> dict: ...
 
     async def stop(self) -> None:

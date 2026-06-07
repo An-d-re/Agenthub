@@ -296,48 +296,6 @@ class AnthropicAdapter(BaseAdapter):
                     raise
         return None
 
-    async def review_result(
-        self, context: AgentContext, original_task: dict, result: str
-    ) -> AgentResponse:
-        if self._fallback_to_deepseek:
-            fb = await self._get_fallback()
-            return await fb.review_result(context, original_task, result)
-
-        review_prompt = (
-            f"审查以下任务输出：\n\n"
-            f"任务：{original_task.get('title', '')}\n描述：{original_task.get('description', '')}\n\n"
-            f"代码/输出：\n{result[:4000]}\n\n"
-            "请以 JSON 格式给出评审结论："
-            '{"passed": true/false, "feedback": "...", "suggested_changes": "..."}'
-        )
-
-        system_prompt = context.config.get("system_prompt", "")
-
-        for attempt, delay in enumerate(RETRY_DELAYS):
-            try:
-                resp = await self._client.messages.create(
-                    model=self._model,
-                    max_tokens=2048,
-                    system=system_prompt if system_prompt else None,
-                    messages=[{"role": "user", "content": review_prompt}],
-                )
-                content = ""
-                for block in resp.content:
-                    if hasattr(block, "text"):
-                        content += block.text
-                return AgentResponse(content=content)
-
-            except Exception as e:
-                logger.warning("Anthropic review_result 第 %d 次尝试失败: %s", attempt + 1, e)
-                if self._is_retryable(e):
-                    if attempt < len(RETRY_DELAYS) - 1:
-                        import asyncio
-                        await asyncio.sleep(delay)
-                else:
-                    raise
-
-        return AgentResponse(content='{"passed": false, "feedback": "审查失败", "suggested_changes": ""}')
-
     async def stop(self) -> None:
         if self._client:
             try:

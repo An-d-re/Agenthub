@@ -189,6 +189,45 @@ pre {
   color: var(--accent);
 }
 
+/* Cover breathing gradient */
+@keyframes cover-breathe {
+  0%,100% { background-position: 0% 50%; }
+  25% { background-position: 50% 0%; }
+  50% { background-position: 100% 50%; }
+  75% { background-position: 50% 100%; }
+}
+.animate-cover-breathe {
+  background-size: 200% 200%;
+  animation: cover-breathe 8s ease-in-out infinite;
+}
+
+/* Cover dissolve transition */
+.cover-container {
+  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cover-glass-pane {
+  transition: backdrop-filter 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              -webkit-backdrop-filter 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+              background 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cover-container.exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+.cover-container.exiting .cover-glass-pane {
+  backdrop-filter: blur(0px) saturate(100%);
+  -webkit-backdrop-filter: blur(0px) saturate(100%);
+  background: transparent;
+}
+.cover-content {
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cover-container.exiting .cover-content {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
 /* Apple frosted glass */
 .glass {
   background: rgba(255,255,255,0.72);

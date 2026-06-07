@@ -349,46 +349,6 @@ class DeepSeekAdapter(BaseAdapter):
 
         return calls, clean_text
 
-    # ── 代码审查（Reviewer 角色）───────────────────────────────
-
-    async def review_result(
-        self, context: AgentContext, original_task: dict, result: str
-    ) -> AgentResponse:
-        review_prompt = (
-            f"审查以下任务输出：\n\n"
-            f"任务：{original_task.get('title', '')}\n描述：{original_task.get('description', '')}\n\n"
-            f"代码/输出：\n{result[:4000]}\n\n"
-            "请以 JSON 格式给出评审结论："
-            '{"passed": true/false, "feedback": "...", "suggested_changes": "..."}'
-        )
-
-        system_prompt = context.config.get("system_prompt", "")
-        messages = []
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": review_prompt})
-
-        for attempt, delay in enumerate(RETRY_DELAYS):
-            try:
-                resp = await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=2048,
-                )
-                return AgentResponse(content=resp.choices[0].message.content or "")
-
-            except Exception as e:
-                logger.warning("DeepSeek review_result 第 %d 次尝试失败: %s", attempt + 1, e)
-                if self._is_retryable(e):
-                    if attempt < len(RETRY_DELAYS) - 1:
-                        import asyncio
-                        await asyncio.sleep(delay)
-                else:
-                    raise
-
-        return AgentResponse(content='{"passed": false, "feedback": "审查失败", "suggested_changes": ""}')
-
     async def stop(self) -> None:
         if self._client:
             try:

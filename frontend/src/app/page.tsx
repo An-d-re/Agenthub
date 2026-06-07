@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { LeftSidebar } from "@/components/contacts/LeftSidebar";
+import { Cover } from "@/components/Cover";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { TaskPipeline } from "@/components/tasks/TaskPipeline";
 import { TracePanel } from "@/components/trace/TracePanel";
 import { useTheme } from "@/hooks/useTheme";
+import { useContacts } from "@/hooks/useContacts";
 import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore } from "@/stores/chatStore";
 import { API_BASE } from "@/lib/constants";
@@ -29,6 +31,15 @@ function RightPanel() {
 export default function Home() {
   const { dark, toggle } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [showCover, setShowCover] = useState(false);
+
+  useEffect(() => {
+    if (!sessionStorage.getItem("agenthub_cover_dismissed")) {
+      setShowCover(true);
+    }
+    setHydrated(true);
+  }, []);
 
   // First-visit Demo
   useEffect(() => {
@@ -58,8 +69,41 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  const { sessions, activeSessionId, setActiveSession } = useContacts();
+
+  // 从 URL 恢复上次打开的会话（仅在会话列表加载后执行一次）
+  const [urlRestored, setUrlRestored] = useState(false);
+
+  useEffect(() => {
+    if (urlRestored || sessions.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const sid = params.get("session");
+    if (sid && sessions.some((s) => s.id === sid)) {
+      setActiveSession(sid);
+    }
+    setUrlRestored(true);
+  }, [sessions.length, urlRestored, setActiveSession]);
+
+  // 活跃会话切换时同步到 URL
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("session") === activeSessionId) return;
+    url.searchParams.set("session", activeSessionId);
+    window.history.replaceState({}, "", url.toString());
+  }, [activeSessionId]);
+
+  // hydration 完成前不渲染，避免 SSR/客户端 DOM 不匹配
+  if (!hydrated) return null;
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--bg-primary)]">
+      {showCover && (
+        <Cover onDismiss={() => {
+          sessionStorage.setItem("agenthub_cover_dismissed", "1");
+          setShowCover(false);
+        }} />
+      )}
       {/* Sidebar — always on md+, togglable on mobile */}
       <div className={cn(
         "w-[240px] shrink-0 border-r border-[var(--border)] flex flex-col transition-transform duration-200",

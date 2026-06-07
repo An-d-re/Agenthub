@@ -154,10 +154,6 @@ clarify → comparison → confirmed → executing → done
 
 `ALLOWED_TRANSITIONS` 字典定义合法转换，`validate_transition(from, to)` 校验。
 
-### 静态审查器（static_reviewer.py）
-
-独立模块，支持 Python AST 解析、JS/TS 括号匹配、HTML/CSS/JSON/SQL 语法校验 + 安全检测（硬编码密钥、eval/exec、命令注入）。**已实现但未集成到执行流**——当前 task 执行不经过静态审查。
-
 ### 数据模型
 
 ```
@@ -220,11 +216,11 @@ Agent：is_temp（临时 Agent 标记）, encrypted_api_key（AES-256-GCM 加密
 - ✅ 会话导出 Markdown（GET /api/sessions/{id}/export）
 - ✅ DeepSeek 思维链（chat.stream.reasoning + chat.reasoning.complete + ReasoningBlock 可折叠展示）
 - ✅ API Key 加密存储（AES-256-GCM，create_temp_agent 时加密，decrypt_api_key 解密）
-- ⚠️ Reviewer 审查机制：Adapter 层 `review_result()` 已实现，但未集成到 task 执行流中
-- ⚠️ 静态审查器：`static_reviewer.py` 已实现，但未集成到执行流
-- ⚠️ CodexAdapter：空桩，完全继承 DeepSeekAdapter
-- ⚠️ ErrorBoundary：组件已定义，未在 layout/page 中挂载使用
-- ❌ 后端测试目录 `backend/tests/` 为空，无测试用例
+- ✅ ErrorBoundary（已挂载到 layout.tsx）
+- ✅ 封面页（聚焦穿透动画 + 品牌渐变 + sessionStorage 持久化）
+- ✅ 会话持久化（URL query param 恢复 + fetchSessions 补全）
+- ⚠️ CodexAdapter：空桩，完全继承 DeepSeekAdapter（前端不可选，预留占位）
+- ⚠️ 后端无 Python 单元测试（pytest），但 `tests/` 目录已有 Playwright E2E 测试（`run-tests` skill）
 
 ## Docker 部署
 

@@ -41,6 +41,7 @@
 - 如果"设置"中列出 Agent：通过 `POST /api/agents` 逐一创建，记录名称→id 映射
 - 创建 Session：`POST /api/sessions`，type 取 frontmatter 的 `type` 字段，加入预创建的 Agent
 - 用 Playwright MCP 打开 `http://localhost:3000`，通过 Zustand store 激活当前 session
+- **封面页处理**：新浏览器上下文没有 sessionStorage，封面页（`.cover-container`）会自动显示。检测 `button:has-text('开始使用')` 是否可见，如可见则点击并等待 0.8s 消散动画完成。
 
 #### 2.3 执行步骤
 
