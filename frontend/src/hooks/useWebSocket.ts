@@ -141,7 +141,16 @@ export function useWebSocket(sessionId: string | null) {
             messageId: p.message_id || "",
             approaches: p.approaches || [],
           });
+        } else if (msg.type === "plan.draft") {
+          // 初步任务草稿 — 只在还没有确认计划时填充，让协作舞台从第一时间就有内容
+          if (!store.confirmedPlans[sessionId]) {
+            store.setConfirmedPlan(sessionId, {
+              tasks: (p.tasks || []).map((t: Record<string, unknown>) => ({ ...t, draft: true })),
+              hint: "任务分解中…",
+            });
+          }
         } else if (msg.type === "plan.confirmed") {
+          // 正式确认 — 覆盖草稿
           store.setConfirmedPlan(sessionId, {
             tasks: p.tasks || [],
             hint: p.hint || "",

@@ -4,27 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-AgentHub 是 IM 聊天式的多 Agent 协作平台（字节跳动 AI 全栈开发挑战赛）。核心理念：**Agent 即联系人**，**会话依赖 Agent**，**群聊是独立实体**。左侧栏三标签（助手/群聊/话题），群聊中 Orchestrator 可见地主持多 Agent 协作。四阶段交互：需求澄清 → 方案对比 → 计划确认 → 迭代执行。
+AgentHub 是 IM 聊天式的多 Agent 协作平台（字节跳动 AI 全栈开发挑战赛）。核心理念：**Agent 即联系人**，**会话依赖 Agent**，**群聊是独立实体**。左侧栏三标签（助手/群聊/话题），点 Agent 直接进入对话（不再跳 tab）。群聊中 Orchestrator 可见地主持多 Agent 协作。四阶段交互：需求澄清 → 方案对比 → 计划确认 → 迭代执行。右侧「协作剧场」可视化 Agent 协作过程。
 
 ## 常用命令
 
 ```bash
-# 后端
-cd backend
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --reload-exclude "workspaces/*" --reload-exclude "data/*"
+# 后端（Windows Git Bash 中 glob 可能被展开，去掉 reload-exclude 或改用单引号）
+cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 前端
-cd frontend
-npm install && npm run dev
+cd frontend && npm run dev
 
 # Docker
 docker-compose up --build
 ```
 
-`backend/.env` 配置 API keys（DeepSeek 必填，Anthropic/OpenCode/Codex 未配自动降级）。
-验证：`python -c "from app.core.orchestrator import Orchestrator; print('OK')"`
+`backend/.env` 配置 API keys（DeepSeek 必填，其余按需）。
 构建：`cd frontend && npx next build`
+后端验证：`python -c "from app.core.orchestrator import Orchestrator; print('OK')"`
 
 ## 技术栈
 
@@ -53,7 +50,7 @@ backend/app/
 │   ├── agent_factory.py  # 任务→Agent 匹配 + 临时 Agent 创建/销毁 + API Key 加密
 │   ├── sandbox/          # SandboxManager（本地/Docker）+ 工具注册表（5 个工具）
 │   ├── tracer.py         # 全链路追踪 span 上下文管理器
-│   ├── static_reviewer.py # 静态代码审查（语法+安全，未集成到执行流）
+│   ├── static_reviewer.py # 静态代码审查（语法+安全，已集成到 executing phase）
 │   ├── task_states.py    # 10 状态机 + 状态转换校验
 │   ├── prompts.py        # Critic/Planner/Coder/Verifier/Reviewer 的 System Prompt
 │   ├── config.py         # pydantic-settings 读 .env
@@ -66,22 +63,33 @@ backend/app/
 frontend/src/
 ├── app/                  # layout.tsx（Geist 字体+ToastProvider）+ page.tsx（三栏布局+Demo引导+主题切换）+ globals.css（CSS变量+动画）
 ├── components/
-│   ├── contacts/         # LeftSidebar（三标签）+ AgentEditor + GroupEditor
-│   ├── chat/             # ChatPanel, MessageList, MessageBubble, MessageInput, CodeBlock
-│   ├── cards/            # PlanCard, DiffCard, PreviewCard
+│   ├── contacts/         # LeftSidebar（三标签+置顶+点Agent直达对话）+ AgentEditor（含模型选择）+ GroupEditor
+│   ├── chat/             # ChatPanel（含任务状态恢复）, MessageList, MessageBubble（Agent图标）, MessageInput（Agent快捷@栏）, CodeBlock
+│   ├── cards/            # PlanCard, DiffCard, PreviewCard, FileCard
 │   ├── plans/            # DAGEditor
-│   ├── tasks/            # TaskPipeline
-│   ├── trace/            # TracePanel（Jaeger 风格瀑布图）
-│   ├── ui/               # shadcn/ui 组件（button/card/dialog/dropdown-menu/input/tabs/tooltip 等）
-│   └── ErrorBoundary.tsx # 类组件错误边界（已定义，未在 layout/page 中使用）
-├── hooks/                # useWebSocket（含重连+断线补齐）, useTheme（localStorage 持久化）, useContacts（会话列表初始化）
-├── stores/               # Zustand：chatStore（核心）, agentStore
-└── lib/                  # constants（EMPTY_ARRAY/API_BASE/WS_BASE）, utils（cn）, time（relativeTime/shortTime）, toast（ToastProvider+useToast）
+│   ├── tasks/            # CollaborationStage（协作剧场，替代旧 TaskPipeline）
+│   ├── trace/            # TracePanel（仅后端 API 保留，UI 已移除）
+│   ├── ui/               # shadcn/ui 组件
+│   ├── SettingsPanel.tsx # 设置侧滑面板（模型 API Key 状态 + 关于）
+│   └── ErrorBoundary.tsx # 错误边界（已挂载到 layout.tsx）
+├── hooks/                # useWebSocket, useTheme, useContacts
+├── stores/               # Zustand：chatStore（核心，SessionItem 用 camelCase）, agentStore
+└── lib/                  # constants（EMPTY_ARRAY 铁律）, utils（cn）, agentIcons（AgentIcon/AgentPlaceholderIcon），toast
 ```
 
 ### 设计系统
 
-CSS 变量定义在 `globals.css`，统一使用 `var(--accent)` / `var(--bg-secondary)` / `var(--text-primary)` 等，避免硬编码 `#007AFF` / `#F5F5F7`。支持浅色/暗色双主题（`dark:` 类切换），`useTheme` hook 管理 localStorage 持久化。组件中 `/opacity` 尾缀（如 `bg-[#007AFF]/10`）因 CSS 变量限制保留硬编码。自定义动画：`animate-spring`（弹性缩放）、`animate-fade-in`、`animate-slide-up`、`animate-pulse-blue`（连接指示灯）、`animate-skeleton`（骨架屏）、`.glass`（毛玻璃）、`.streaming-cursor`（闪烁光标）。
+**色调**：Warm dark（`#141210` 基色，`#B8956A` 琥珀 accent）。浅色模式 warm ivory（`#FAF8F5`）。CSS 变量在 `globals.css`，统一用 `var(--accent)` / `var(--bg-secondary)` / `var(--text-primary)`，禁止硬编码品牌色。`useTheme` hook 管理 localStorage 持久化。
+
+**布局**：三栏通用 header 高度 **48px**，顶部 border-b 水平对齐。主题切换 + 设置按钮在右上角固定定位。主题切换从右下角移到右上角。
+
+**Agent 图标**：用 `AgentIcon` / `AgentPlaceholderIcon` 组件（`@/lib/agentIcons`），**禁止 emoji** 表示 Agent 类型。每个 adapter type 有独特的 SVG 图标（DeepSeek=神经网络节点，Anthropic=十角星，OpenCode=代码括号，Codex=立方体）。
+
+**角色颜色**：简化为 3 类——决策层(Planner/Critic)=琥珀色，执行层(Coder/Write/Calculate/Data/Design/Analyze)=中性灰，审查层(Reviewer/Verify)=绿色。
+
+**动画**：`animate-spring`、`animate-fade-in`、`animate-slide-up`、`animate-pulse-blue`、`animate-skeleton`、`.glass`（毛玻璃）、`.streaming-cursor`。
+
+**Zustand 铁律**：selector 中永远使用 `EMPTY_ARRAY` 常量（`@/lib/constants`），**禁止 `|| []`**——会创建新引用导致无限重渲染。
 
 ### 前/后端消息协议
 
@@ -104,7 +112,7 @@ WS 信封：`{type, session_id, payload}`
 ```
 clarify → comparison → confirmed → executing → done
 ```
-- **Phase 处理器**：`core/phases/` 目录，每个 phase 独立文件，通过 `PHASE_REGISTRY` 字典注册
+- **Phase 处理器**：`core/phases/` 目录，通过 `PHASE_REGISTRY` 字典注册。Clarify 阶段用 `_critic_has_confirmed()` 检测 `[READY]` 标记 + `_is_still_asking()` 防误判——即使有 [READY]，如果仍在向用户提问也不推进
 - **自动推进**：clarify→comparison→confirmed 在一个请求内连续执行，只在"选方案"和"确认DAG"时暂停等待用户
 - **方案选择**：前端 PlanCard 点击 → `plan.action select_approach` WS 直接 API，不走文本解析
 - **并行执行**：就绪任务通过 `asyncio.gather` 并行执行，SubagentLimiter（`asyncio.Semaphore(3)`）控制并发
@@ -140,6 +148,23 @@ clarify → comparison → confirmed → executing → done
 - **create_temp_agent**：为无匹配 Agent 的任务自动创建临时 Agent（`is_temp=True`），按 capability 命名（如 "Coder#temp"），API key AES-256-GCM 加密存储
 - **destroy_temp_agents**：plan done 时清理 session 的所有临时 Agent
 - **API Key 加密**：AES-256-GCM，密钥由 `SECRET_KEY` env 经 SHA-256 派生，nonce 前置 + base64 编码
+
+### 协作剧场（CollaborationStage）
+
+右侧 340px 面板展示多 Agent 协作过程。数据流：
+
+- **任务来源**：`chatStore.tasks[sessionId]`（WebSocket `task.update` 推送）+ `chatStore.confirmedPlans[sessionId]`（DAG 确认后的全量计划）
+- **Agent 定位**：`computeSlot()` 根据角色计算绝对定位坐标——Orchestrator 居中，其余 Agent 沿弧线分布
+- **依赖连线**：`DependencyWires` 用 `getBoundingClientRect()` 获取 DOM 位置，SVG 贝塞尔曲线连接
+- **完成动画**：`CompletionBurst` 粒子从舞台中心向外飞散，Agent 头像 staggered 闪绿
+- **全部任务始终可见**：合并 `confirmedPlan.tasks`（含未开始 pending）+ 运行时 `tasks`，一次性展示总量（`1/5 → 5/5`）
+
+### 任务刷新持久化
+
+在 `ChatPanel.tsx` 的 `useEffect([activeSessionId])` 中，`GET /api/sessions/{id}` 返回的 `plan.tasks` 被映射到 `TaskItem[]` 并写入 store。逻辑：
+1. WS 推送任务优先（更实时）
+2. `existingTasks.length === 0` 时才从 API 恢复（WS 已连则不覆盖）
+3. 处于 executing 阶段时同步恢复 `confirmedPlan`（供协作剧场渲染 DAG）
 
 ### 沙箱（sandbox/）
 
@@ -185,42 +210,38 @@ Agent：is_temp（临时 Agent 标记）, encrypted_api_key（AES-256-GCM 加密
 - 默认不写注释，只 WHY 不显然时加一行
 - 不处理不可能的错误场景，不做"未来可能需要"的抽象
 - Python：`except Exception`，pydantic-settings 读 env
-- 前端：Zustand selector 不用 `|| []`（会导致无限渲染），用 `EMPTY_ARRAY` 常量
+- 前端：Zustand selector **禁止** `|| []`（每次渲染新引用 → 无限循环），必须用 `EMPTY_ARRAY`（`@/lib/constants`）
+- `SessionItem` 字段用 camelCase（`agentCount`, `agentIds`, `pinnedAt`），API 传参用 snake_case
+- Agent 图标**禁止 emoji**，用 `AgentIcon` / `AgentPlaceholderIcon`（`@/lib/agentIcons`）
+- `dark:text-[var(--bg-secondary)]` 是 bug——bg-secondary 是深色背景色，不可做文字色。文字色用 `dark:text-[var(--text-primary)]`
+- 三栏 header 统高 48px，顶部 border-b 必须对齐
 
 ## 当前进度
 
 - ✅ 基础设施（DB/REST/WS/适配器/沙箱/工具注册表）
-- ✅ 前端三栏布局 + 左侧三标签（助手🤖/群聊👥/话题💬，SVG 图标 + spring 滑动指示线）
-- ✅ Apple 设计系统（CSS 变量 + 浅色/暗色双主题 + 毛玻璃 + 焦点环 + 微交互动画）
-- ✅ Orchestrator 四阶段 + Phase 独立处理器 + 自动推进（仅关键决策点暂停）
-- ✅ PlanCard 方案选择直连 WebSocket（plan.action select_approach）
-- ✅ Agent 消息角色可见（Critic🔍/Planner📋/Coder💻/Reviewer✅ 等 9 种角色徽章 + 气泡颜色区分）
-- ✅ 全局 Toast 通知系统（success/error/warning/info + framer-motion 动画 + 3 条队列）
-- ✅ TracePanel（Jaeger 风格瀑布图 + 服务筛选 + trace 选择器）
-- ✅ Diff 卡片 + Monaco DiffEditor（original_content 从旧 artifact 提取）
-- ✅ Web Preview（iframe sandbox + 设备尺寸切换 phone/tablet/desktop + HTML/SVG/CSS/JS）
-- ✅ 一键部署（POST /api/deployments → 静态 HTML 生成 → URL + 状态轮询，20s 超时）
-- ✅ TaskPipeline 面板（9 状态 + 进度条 + 实时耗时 + 错误详情 + 骨架屏加载态）
-- ✅ DAGEditor（任务勾选/删除 + 执行器选择 existing/new + 模型选择 + API Key 加密输入）
-- ✅ @Mention Agent 选择（前端下拉 + 键盘导航）
-- ✅ 并行任务执行（asyncio.gather + 独立 DB session，SubagentLimiter 控制并发 ≤3）
-- ✅ 群聊创建面板（GroupEditor 多选 Agent + 群名称输入）
-- ✅ Agent 编辑/删除（AgentEditor 侧滑面板 + Skill 预置库勾选 + 系统 Agent 保护）
-- ✅ 引用回复 + 重新生成 + 一键应用 Diff + Session 停止/恢复
-- ✅ 文件上传（XMLHttpRequest + 进度百分比 + 图片内联预览 + 文件附件卡片）
-- ✅ 对话式局部修改（CodeBlock 行号选择 + chat.modify 协议 + 流式 Diff）
-- ✅ WS 断线消息补齐 + 离线横幅（黄色重连/绿色恢复，最多 8 次重试）
-- ✅ LLM 上下文压缩（ContextSummarizer：50 条/8K tokens 触发，DeepSeek 四维度摘要 + 规则降级）
-- ✅ 骨架屏（LeftSidebar + TaskPipeline + MessageList + DiffCard）
-- ✅ 首次打开 Demo 引导（localStorage 标记，轮询 agents 就绪后自动创建 Demo 群聊）
-- ✅ 会话导出 Markdown（GET /api/sessions/{id}/export）
-- ✅ DeepSeek 思维链（chat.stream.reasoning + chat.reasoning.complete + ReasoningBlock 可折叠展示）
-- ✅ API Key 加密存储（AES-256-GCM，create_temp_agent 时加密，decrypt_api_key 解密）
-- ✅ ErrorBoundary（已挂载到 layout.tsx）
-- ✅ 封面页（聚焦穿透动画 + 品牌渐变 + sessionStorage 持久化）
-- ✅ 会话持久化（URL query param 恢复 + fetchSessions 补全）
-- ⚠️ CodexAdapter：空桩，完全继承 DeepSeekAdapter（前端不可选，预留占位）
-- ⚠️ 后端无 Python 单元测试（pytest），但 `tests/` 目录已有 Playwright E2E 测试（`run-tests` skill）
+- ✅ 前端三栏布局 + warm dark 设计系统（琥珀 accent #B8956A，暗色基色 #141210）
+- ✅ Orchestrator 四阶段 + Phase 处理器 + 自动推进 + `[READY]` 防误判
+- ✅ PlanCard 方案选择 + DAGEditor 确认执行
+- ✅ 协作剧场 (CollaborationStage)：Agent 头像环 + 呼吸动画 + 依赖连线 + 完成粒子爆发
+- ✅ Agent 消息角色可见（简化 3 类：决策/执行/审查）
+- ✅ SVG Agent 图标（替代所有 emoji）：`AgentIcon` / `AgentPlaceholderIcon`
+- ✅ 群聊 Agent 快捷 @ 栏（输入框上方可见头像，点击即 @）
+- ✅ 点 Agent 直接进入对话（自动查找或创建，不跳 tab）
+- ✅ 置顶功能（API-first + 本地排序，snake_case 对接到 API）
+- ✅ Cover 封面动画（任意位置点击跳过）
+- ✅ 设置面板（右上齿轮 + 侧滑，显示各模型 API Key 配置状态）
+- ✅ AgentEditor 模型选择（DeepSeek / Anthropic / OpenCode）
+- ✅ 空状态具体示例（可点击 prompt 快速填充）
+- ✅ 会话导出 Markdown + 文件上传 + Web Preview + 一键部署
+- ✅ DeepSeek 思维链可折叠展示
+- ✅ API Key AES-256-GCM 加密存储
+- ✅ static_reviewer 已集成到 executing phase
+- ✅ 后端 pytest 测试（33 个测试，test_api/test_event_bus/test_task_states）
+- ✅ 任务状态页面刷新持久化（从 `GET /api/sessions/{id}` 的 `plan.tasks` 恢复）
+- ✅ ErrorBoundary 挂载到 layout.tsx
+- ✅ 会话持久化（URL query param 恢复 + 断线补齐）
+- ⚠️ CodexAdapter：空桩（前端不可选）
+- ⚠️ TracePanel 从 UI 移除（后端 API `/api/sessions/{id}/diagnostics` 保留供调试）
 
 ## Docker 部署
 

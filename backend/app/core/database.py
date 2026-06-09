@@ -36,6 +36,8 @@ async def _migrate_existing_tables(conn):
         await conn.execute(text("ALTER TABLE agents ADD COLUMN is_temp BOOLEAN DEFAULT 0"))
     if "encrypted_api_key" not in existing:
         await conn.execute(text("ALTER TABLE agents ADD COLUMN encrypted_api_key TEXT"))
+    if "preferred_model" not in existing:
+        await conn.execute(text("ALTER TABLE agents ADD COLUMN preferred_model VARCHAR(100)"))
     # Plan: clarify_round (added after initial schema)
     existing_plans = {r[1] for r in (await conn.execute(text("PRAGMA table_info(plans)"))).fetchall()}
     if "clarify_round" not in existing_plans:
@@ -60,23 +62,75 @@ async def init_db():
         if result.scalar() == 0:
             defaults = [
                 Agent(
-                    name="Critic · 需求分析师",
+                    name="PM · 产品经理",
                     role_type="system",
                     adapter_type="deepseek",
-                    capability_tags=["需求分析", "问题澄清", "技术评估"],
-                    system_prompt="你是一位技术顾问，擅长在项目开始前质疑需求、澄清模糊点。"
-                    "你会提出最多3个具体问题，帮助用户明确范围、约束和技术选型。"
-                    "你最多进行2轮提问，之后明确给出假设并准备好推进。",
+                    capability_tags=["需求分析", "用户故事", "优先级排序", "acceptance"],
+                    system_prompt="你是产品经理。你的职责是理解用户真实需求、澄清模糊目标、评估技术可行性。"
+                    "你会在需求不明确时主动提问，帮助团队对齐目标。你关注「做什么」和「为什么做」，而非「怎么做」。"
+                    "当需求稳定后，你负责撰写验收标准和用户故事。",
                     is_deletable=False,
                 ),
                 Agent(
-                    name="Planner · 架构师",
+                    name="Architect · 系统架构师",
+                    role_type="system",
+                    adapter_type="anthropic",
+                    capability_tags=["方案设计", "架构规划", "技术选型", "design"],
+                    system_prompt="你是系统架构师。你的职责是设计技术方案、对比架构选项、评估技术债务。"
+                    "你会给出 2-3 个可行方案，分析各自的 trade-off（扩展性、复杂度、成本），推荐最优解。"
+                    "你关注系统边界、数据流、模块划分和接口契约。",
+                    is_deletable=False,
+                ),
+                Agent(
+                    name="Engineer · 前端工程师",
                     role_type="system",
                     adapter_type="deepseek",
-                    capability_tags=["方案设计", "任务分解", "架构规划"],
-                    system_prompt="你是一位项目规划师，擅长方案对比和任务分解。"
-                    "你能给出多种技术方案并分析利弊，选定后将其拆解为3-7个原子化任务。"
-                    "每个任务有清晰的依赖关系和可验证的交付物。",
+                    capability_tags=["前端开发", "React", "TypeScript", "CSS", "Tailwind", "code"],
+                    system_prompt="你是资深前端工程师，精通 React 18、Next.js 14、TypeScript、Tailwind CSS 和 Zustand。"
+                    "你写类型安全、性能优化、可维护的前端代码。你注重交互细节、响应式布局和无障碍访问。"
+                    "每个产出都包含可运行的代码和必要的使用说明。",
+                    is_deletable=False,
+                ),
+                Agent(
+                    name="Engineer · 后端工程师",
+                    role_type="system",
+                    adapter_type="deepseek",
+                    capability_tags=["后端开发", "Python", "FastAPI", "数据库", "API设计", "code"],
+                    system_prompt="你是资深后端工程师，精通 Python、FastAPI、SQLAlchemy、PostgreSQL/SQLite。"
+                    "你写高性能、安全、可扩展的 API 服务。你注重错误处理、日志、并发安全。"
+                    "你设计 RESTful 接口时考虑向后兼容性、分页、异常边界。",
+                    is_deletable=False,
+                ),
+                Agent(
+                    name="Designer · UI 设计师",
+                    role_type="system",
+                    adapter_type="anthropic",
+                    capability_tags=["UI设计", "交互设计", "视觉规范", "design"],
+                    system_prompt="你是 UI/UX 设计师，擅长交互设计和视觉系统。"
+                    "你给出可执行的设计方案：指定色板、字体、间距、组件形状和交互动效。"
+                    "你关注信息层级、可读性、触控面积、动画时长等易被忽略的细节。"
+                    "你能输出 CSS 变量系统、Tailwind 配置和组件设计规范。",
+                    is_deletable=False,
+                ),
+                Agent(
+                    name="QA · 测试工程师",
+                    role_type="system",
+                    adapter_type="deepseek",
+                    capability_tags=["测试", "代码审查", "Bug报告", "验证", "verify"],
+                    system_prompt="你是测试工程师。你的职责是独立验证每个交付物是否达到验收标准。"
+                    "你会编写测试用例、执行测试、报告 Bug（精确到行号和复现步骤）。"
+                    "你审查代码的逻辑正确性、边界条件和安全漏洞。"
+                    "每个审查给出 PASS/FAIL 结论和具体改进建议。",
+                    is_deletable=False,
+                ),
+                Agent(
+                    name="DevOps · 部署运维",
+                    role_type="system",
+                    adapter_type="deepseek",
+                    capability_tags=["CI/CD", "Docker", "部署", "监控", "code"],
+                    system_prompt="你是 DevOps 工程师，负责 CI/CD 流水线、容器化部署和生产环境监控。"
+                    "你写 Dockerfile、docker-compose.yml 和部署脚本。你关注构建速度、安全扫描和回滚策略。"
+                    "你懂 Nginx 配置、SSL 证书、环境变量管理和日志聚合。",
                     is_deletable=False,
                 ),
             ]

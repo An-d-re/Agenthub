@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/constants";
 import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
+import { AgentIcon } from "@/lib/agentIcons";
 import { CodeBlock } from "./CodeBlock";
 import { FileCard } from "@/components/cards/FileCard";
 
@@ -105,6 +106,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
   const agents = useAgentStore(s => s.agents);
   const setReplyTarget = useChatStore(s => s.setReplyTarget);
   const [hovered, setHovered] = useState(false);
+  const msgAgent = message.agentId ? agents.find(a => a.id === message.agentId) || null : null;
 
   const getAgentName = (agentId?: string) => {
     if (!agentId) return "Agent";
@@ -144,6 +146,13 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
     });
   };
 
+  const ADAPTER_GRADIENT: Record<string, string> = {
+    deepseek: "from-purple-500 to-indigo-500",
+    anthropic: "from-amber-400 to-orange-500",
+    opencode: "from-blue-400 to-cyan-500",
+    codex: "from-cyan-400 to-teal-500",
+  };
+
   return (
     <motion.div {...bubbleSpring} transition={{ ...bubbleSpring.transition, delay: index * 0.03 }}
       className={cn("flex w-full mb-1.5 px-6 gap-3 group", isUser ? "flex-row-reverse" : "flex-row")}
@@ -151,11 +160,17 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
       onMouseLeave={() => setHovered(false)}
     >
       <div className={cn(
-        "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
-        isUser ? "bg-[var(--accent)]/10" : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]"
+        "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 overflow-hidden",
+        isUser ? "bg-[var(--accent)]/10" :
+        msgAgent ? `bg-gradient-to-br ${ADAPTER_GRADIENT[msgAgent.adapterType] || "from-gray-400 to-gray-500"}` :
+        "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)]",
       )}>
         {isUser ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        ) : msgAgent?.avatarUrl ? (
+          <img src={msgAgent.avatarUrl} className="w-8 h-8 rounded-full object-cover" alt={msgAgent.name} />
+        ) : msgAgent ? (
+          <AgentIcon adapterType={msgAgent.adapterType} size={15} />
         ) : (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="9" cy="10" r="1.5"/><circle cx="15" cy="10" r="1.5"/><path d="M8 16c0-2 4-4 8-4s4 2 4 4"/></svg>
         )}
@@ -279,7 +294,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               <div className="mt-1 text-[14px]">{message.content}</div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap [&>p]:my-0">
+            <div className="whitespace-pre-wrap [&>p]:my-0 text-pretty">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{

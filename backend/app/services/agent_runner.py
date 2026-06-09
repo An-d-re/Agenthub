@@ -13,6 +13,7 @@ from app.models.message import Message
 from app.models.session import SessionAgent
 from app.services.adapters import create_adapter
 from app.services.adapters.base import AgentContext, AgentRole
+from app.services.adapters.config_resolver import resolve_adapter_config
 
 
 def _utcnow():
@@ -51,12 +52,14 @@ async def run_agent_reply(session_id: str, user_message: str):
     # Create adapter
     adapter = create_adapter(agent.adapter_type)
     try:
-        await adapter.initialize({
-            "api_key": None,  # uses settings env var as fallback
-            "model": None,    # uses adapter default
-            "system_prompt": agent.system_prompt or None,
-            "deep_thinking": True,
-        })
+        config = await resolve_adapter_config(
+            agent.adapter_type,
+            encrypted_agent_key=agent.encrypted_api_key,
+            preferred_model=agent.preferred_model,
+        )
+        config["system_prompt"] = agent.system_prompt or None
+        config["deep_thinking"] = True
+        await adapter.initialize(config)
 
         context = AgentContext(
             session_id=session_id,
@@ -161,12 +164,14 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
 
     adapter = create_adapter(agent.adapter_type)
     try:
-        await adapter.initialize({
-            "api_key": None,
-            "model": None,
-            "system_prompt": agent.system_prompt or None,
-            "deep_thinking": True,
-        })
+        config = await resolve_adapter_config(
+            agent.adapter_type,
+            encrypted_agent_key=agent.encrypted_api_key,
+            preferred_model=agent.preferred_model,
+        )
+        config["system_prompt"] = agent.system_prompt or None
+        config["deep_thinking"] = True
+        await adapter.initialize(config)
 
         context = AgentContext(
             session_id=session_id,

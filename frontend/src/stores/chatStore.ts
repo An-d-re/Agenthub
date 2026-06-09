@@ -86,6 +86,7 @@ export interface DAGTask {
   selected_agent_id?: string | null;   // 用户选中的现有 Agent ID
   selected_adapter_type?: string;      // 用户为"新建"选的模型
   selected_api_key?: string;           // 用户输入的 API Key（仅当模型未配置时）
+  draft?: boolean;  // true = clarify 阶段生成的初步任务草稿
   db_id: string;
 }
 

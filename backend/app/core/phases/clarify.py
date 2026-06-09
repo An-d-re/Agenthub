@@ -59,12 +59,16 @@ class ClarifyHandler(BasePhaseHandler):
         # 停止检查
         if self._get_stop_event(ctx.plan.session_id) and self._get_stop_event(ctx.plan.session_id).is_set():
             await self._send_system_message(
-                ctx.db, ctx.plan.session_id, "⏹️ 已停止生成。",
+                ctx.db, ctx.plan.session_id, "已停止生成。",
                 pending_events=ctx.pending_events,
             )
             return None
 
         clarify_round = ctx.plan.clarify_round or 0
+
+        # ── 首次进入 clarify 时生成初步任务草稿，推送到前端 ──
+        if clarify_round == 0:
+            await self._publish_draft_plan(ctx)
 
         # 轮次 1+：必须等用户说 ok/确认 才推进
         if clarify_round > 0:

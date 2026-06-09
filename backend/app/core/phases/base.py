@@ -19,6 +19,7 @@ from app.models.plan import Plan
 from app.models.session import SessionAgent
 from app.models.task import Task, TaskDependency
 from app.services.adapters import create_adapter
+from app.services.adapters.config_resolver import resolve_adapter_config
 from app.services.adapters.base import AgentContext, AgentRole, BaseAdapter
 
 logger = logging.getLogger(__name__)
@@ -87,12 +88,14 @@ class BasePhaseHandler:
         if not agent:
             return None, None
         adapter = create_adapter(agent.adapter_type)
-        await adapter.initialize({
-            "api_key": None,
-            "model": None,
-            "system_prompt": agent.system_prompt or None,
-            "deep_thinking": True,  # 启用 DeepSeek 深度思考模式
-        })
+        config = await resolve_adapter_config(
+            agent.adapter_type,
+            encrypted_agent_key=agent.encrypted_api_key,
+            preferred_model=agent.preferred_model,
+        )
+        config["system_prompt"] = agent.system_prompt or None
+        config["deep_thinking"] = True
+        await adapter.initialize(config)
         return agent, adapter
 
     # 技术关键词 → 能力标签映射
@@ -303,12 +306,14 @@ class BasePhaseHandler:
 
         # 初始化适配器（复用全局 API key）
         adapter = create_adapter(agent.adapter_type)
-        await adapter.initialize({
-            "api_key": None,
-            "model": None,
-            "system_prompt": agent.system_prompt or None,
-            "deep_thinking": True,
-        })
+        config = await resolve_adapter_config(
+            agent.adapter_type,
+            encrypted_agent_key=agent.encrypted_api_key,
+            preferred_model=agent.preferred_model,
+        )
+        config["system_prompt"] = agent.system_prompt or None
+        config["deep_thinking"] = True
+        await adapter.initialize(config)
 
         logger.info("Auto-created agent %s (role=%s) for session %s", agent.id, role, session_id)
         return agent, adapter
@@ -612,3 +617,74 @@ class BasePhaseHandler:
             if 0 <= idx < len(approaches):
                 return approaches[idx]
         return None
+
+    # ── 初步任务 DAG 生成（用于 clarify 阶段提前展示）──────────────────
+
+    async def _publish_draft_plan(self, ctx: PhaseContext) -> None:
+        """在 clarify 阶段开始时，快速生成初步任务拆解并推送到前端。
+
+        使用 Planner/Leader Agent 分析需求，生成 3-6 个估计任务步骤。
+        前端收到 plan.draft 后立即在协作舞台渲染全部任务（灰色待办状态）。
+        """
+        agent, adapter = await self._get_agent_for_role(
+            ctx.db, ctx.plan.session_id, "planner", ctx.mentions,
+        )
+        if not agent or not adapter:
+            # 没有 Planner agent，用 Critic 降级
+            agent, adapter = await self._get_agent_for_role(
+                ctx.db, ctx.plan.session_id, "critic", ctx.mentions,
+            )
+        if not agent or not adapter:
+            return
+
+        prompt = (
+            "Based on the user's request below, break it down into 3-6 sequential task steps.\n\n"
+            "User request: " + ctx.user_message + "\n\n"
+            "Reply with a JSON array. Each item has:\n"
+            '- "id": short kebab-case id (e.g. "analyze-requirements")\n'
+            '- "title": Chinese task name (max 12 chars)\n'
+            '- "description": one sentence describing what this task does\n'
+            '- "required_capability": one of calculate/code/verify/design/analyze/write/data\n'
+            '- "dependencies": array of task ids that must complete before this one\n\n'
+            "Only output the JSON array, no other text."
+        )
+
+        try:
+            context = AgentContext(
+                session_id=ctx.plan.session_id,
+                agent_role=AgentRole.PLANNER,
+                config={"system_prompt": "You are a project planner. Output ONLY valid JSON, no markdown fences."},
+            )
+            resp = await adapter.send_message(context, prompt)
+            await adapter.stop()
+
+            content = resp.content.strip()
+            # Remove markdown code fences if present
+            if content.startswith("```"):
+                content = re.sub(r"```\w*\n?", "", content)
+                content = content.rstrip("```").strip()
+            tasks_raw = json.loads(content)
+
+            dag_for_frontend = []
+            for t in tasks_raw[:6]:
+                dag_for_frontend.append({
+                    "id": t.get("id", f"task-{len(dag_for_frontend)}"),
+                    "title": t.get("title", "任务"),
+                    "description": t.get("description", ""),
+                    "dependencies": t.get("dependencies", []),
+                    "required_capability": t.get("required_capability", "code"),
+                    "executor_type": "existing",
+                    "agent_id": None,
+                    "agent_name": None,
+                    "match_reason": "待分配",
+                    "selected_agent_id": None,
+                })
+
+            ctx.pending_events.append({
+                "type": "plan.draft",
+                "session_id": ctx.plan.session_id,
+                "payload": {"tasks": dag_for_frontend},
+            })
+            logger.info("Published draft plan with %d tasks", len(dag_for_frontend))
+        except Exception as e:
+            logger.warning("Failed to generate draft plan: %s", e)

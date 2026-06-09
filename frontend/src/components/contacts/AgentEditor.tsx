@@ -14,10 +14,22 @@ const PRESET_SKILLS = [
   { id: "web-development", label: "Web 开发", icon: "🌐", tag: "Web开发" },
 ];
 
+interface ModelVariant {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface ProviderModels {
+  models: ModelVariant[];
+  selected_model: string;
+  has_key: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  editAgent?: { id: string; name: string; systemPrompt: string; skills: string[]; capabilityTags: string[]; avatarUrl: string } | null;
+  editAgent?: { id: string; name: string; systemPrompt: string; skills: string[]; capabilityTags: string[]; avatarUrl: string; adapterType: string; preferredModel?: string } | null;
   onCreated?: (agentId: string) => void;
 }
 
@@ -26,23 +38,35 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [adapterType, setAdapterType] = useState("deepseek");
+  const [preferredModel, setPreferredModel] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [customTags, setCustomTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [modelCatalog, setModelCatalog] = useState<Record<string, ProviderModels>>({});
   const addAgent = useAgentStore(s => s.addAgent);
   const setAgents = useAgentStore(s => s.setAgents);
   const agents = useAgentStore(s => s.agents);
 
   useEffect(() => {
+    // Fetch model catalog
+    if (open) {
+      fetch(`${API_BASE}/api/settings/models`)
+        .then(r => r.json())
+        .then(data => setModelCatalog(data.providers || {}))
+        .catch(() => {});
+    }
     if (editAgent) {
       setName(editAgent.name);
       setSystemPrompt(editAgent.systemPrompt);
       setSelectedSkills(editAgent.skills || []);
       setCustomTags(editAgent.capabilityTags || []);
       setAvatarUrl(editAgent.avatarUrl || "");
+      setAdapterType(editAgent.adapterType);
+      setPreferredModel(editAgent.preferredModel || "");
     } else {
-      setName(""); setSystemPrompt(""); setSelectedSkills([]); setCustomTags([]); setAvatarUrl("");
+      setName(""); setSystemPrompt(""); setSelectedSkills([]); setCustomTags([]); setAvatarUrl(""); setAdapterType("deepseek"); setPreferredModel("");
     }
     setError("");
   }, [editAgent, open]);
@@ -74,15 +98,16 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
     if (!name.trim()) return;
     setSaving(true); setError("");
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: name.trim(),
         role_type: "custom",
-        adapter_type: "deepseek",
+        adapter_type: adapterType,
         system_prompt: systemPrompt,
         skills: selectedSkills,
         capability_tags: allTags,
         avatar_url: avatarUrl,
       };
+      if (preferredModel) payload.preferred_model = preferredModel;
       let res;
       if (editAgent) {
         res = await fetch(`${API_BASE}/api/agents/${editAgent.id}`, {
@@ -98,9 +123,9 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
       if (res.ok) {
         const data = await res.json();
         if (editAgent) {
-          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, systemPrompt: data.system_prompt, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url } : a));
+          setAgents(agents.map(a => a.id === editAgent.id ? { ...a, name: data.name, systemPrompt: data.system_prompt, capabilityTags: data.capability_tags, avatarUrl: data.avatar_url, adapterType: data.adapter_type, preferredModel: data.preferred_model } : a));
         } else {
-          addAgent({ id: data.id, name: data.name, avatarUrl: data.avatar_url || "", roleType: data.role_type, adapterType: data.adapter_type, capabilityTags: data.capability_tags || [], isDeletable: data.is_deletable });
+          addAgent({ id: data.id, name: data.name, avatarUrl: data.avatar_url || "", roleType: data.role_type, adapterType: data.adapter_type, capabilityTags: data.capability_tags || [], isDeletable: data.is_deletable, preferredModel: data.preferred_model });
           onCreated?.(data.id);
         }
         onClose();
@@ -177,6 +202,83 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
                   {name.length >= 20 && <span className="text-[11px] text-[var(--danger)]">名称不能超过 20 个字符</span>}
                   <span className="text-[11px] text-[var(--text-tertiary)] ml-auto">{name.length}/20</span>
                 </div>
+              </div>
+
+              {/* Model Selection */}
+              <div>
+                <label className="text-[13px] font-medium text-[var(--text-primary)] mb-1.5 block">
+                  模型提供商
+                </label>
+                <div className="flex gap-2 mb-3">
+                  {[
+                    { key: "deepseek", name: "DeepSeek", color: "from-purple-500 to-indigo-500" },
+                    { key: "anthropic", name: "Anthropic", color: "from-amber-400 to-orange-500" },
+                    { key: "opencode", name: "OpenCode", color: "from-blue-400 to-cyan-500" },
+                  ].map(m => (
+                    <button
+                      key={m.key}
+                      onClick={() => { setAdapterType(m.key); setPreferredModel(""); }}
+                      className={cn(
+                        "flex-1 py-2.5 rounded-xl text-[12px] font-medium transition-all border",
+                        adapterType === m.key
+                          ? "border-[var(--accent)] bg-[var(--accent)]/5 text-[var(--accent)]"
+                          : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--accent)]/30 bg-[var(--bg-secondary)]",
+                      )}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+                {/* 具体模型变体选择 */}
+                {modelCatalog[adapterType]?.models && (
+                  <div>
+                    <label className="text-[12px] font-medium text-[var(--text-primary)] mb-2 block">
+                      选择模型变体 <span className="text-[var(--text-tertiary)] font-normal">· 默认使用全局设置</span>
+                    </label>
+                    <div className="space-y-1.5">
+                      <button
+                        onClick={() => setPreferredModel("")}
+                        className={cn(
+                          "w-full text-left px-4 py-3 rounded-xl text-[13px] transition-all border",
+                          !preferredModel
+                            ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                            : "border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--accent)]/20",
+                        )}
+                      >
+                        <div className="font-medium text-[var(--text-primary)]">跟随全局默认</div>
+                        <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">使用设置面板中选择的默认模型</div>
+                      </button>
+                      {modelCatalog[adapterType].models.map(mv => (
+                        <button
+                          key={mv.id}
+                          onClick={() => setPreferredModel(mv.id)}
+                          className={cn(
+                            "w-full text-left px-4 py-3 rounded-xl text-[13px] transition-all border",
+                            preferredModel === mv.id
+                              ? "border-[var(--accent)] bg-[var(--accent)]/5"
+                              : "border-[var(--border)] bg-[var(--bg-secondary)] hover:border-[var(--accent)]/20",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={cn(
+                              "font-medium",
+                              preferredModel === mv.id ? "text-[var(--accent)]" : "text-[var(--text-primary)]",
+                            )}>
+                              {mv.name}
+                            </span>
+                            {preferredModel === mv.id && (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[var(--text-secondary)] mt-0.5">{mv.description}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!modelCatalog[adapterType]?.has_key && (
+                  <p className="text-[11px] text-[var(--warning)] mt-3">该提供商 API Key 未配置，请在设置中配置</p>
+                )}
               </div>
 
               {/* System Prompt */}

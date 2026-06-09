@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWebSocket } from "@/hooks/useWebSocket";
-import { useChatStore } from "@/stores/chatStore";
+import { useChatStore, type TaskItem } from "@/stores/chatStore";
 import { useAgentStore } from "@/stores/agentStore";
 import { API_BASE, EMPTY_ARRAY } from "@/lib/constants";
 import { AgentIcon } from "@/lib/agentIcons";
@@ -97,9 +97,46 @@ export function ChatPanel() {
     if (!activeSessionId) return;
     let cancelled = false;
     fetch(`${API_BASE}/api/sessions/${activeSessionId}`).then(r => r.json()).then(data => {
-      if (!cancelled) {
-        const ids = (data.agents || []).map((a: {agent_id:string}) => a.agent_id);
-        useChatStore.getState().initSessionAgents(activeSessionId, ids);
+      if (cancelled) return;
+      const store = useChatStore.getState();
+
+      // 恢复 Agent 列表
+      const ids = (data.agents || []).map((a: {agent_id:string}) => a.agent_id);
+      store.initSessionAgents(activeSessionId, ids);
+
+      // 恢复任务状态（页面刷新后从 DB 重新加载）
+      const planTasks = data.plan?.tasks;
+      if (planTasks && planTasks.length > 0) {
+        const existingTasks = store.tasks[activeSessionId] || [];
+        // WebSocket 推送的任务优先（更实时），API 恢复的作为补充
+        if (existingTasks.length === 0) {
+          store.setTasks(activeSessionId, planTasks.map((t: Record<string,unknown>) => ({
+            taskId: t.task_id as string,
+            title: t.title as string,
+            status: t.status as TaskItem["status"],
+            agentId: t.assigned_agent_id as string,
+            startedAt: t.started_at as string,
+            completedAt: t.completed_at as string,
+          })));
+        }
+
+        // 恢复 confirmedPlan（如果处于 executing 阶段）
+        if (data.plan?.phase === "executing" && !store.confirmedPlans[activeSessionId]) {
+          const dagTasks = planTasks.map((t: Record<string,unknown>) => ({
+            id: t.task_id as string,
+            title: t.title as string,
+            description: "",
+            dependencies: [] as string[],
+            required_capability: "",
+            executor_type: "existing" as const,
+            agent_id: t.assigned_agent_id as string,
+            agent_name: "",
+            match_reason: "",
+            selected_agent_id: t.assigned_agent_id as string,
+            db_id: t.task_id as string,
+          }));
+          store.setConfirmedPlan(activeSessionId, { tasks: dagTasks, hint: "" });
+        }
       }
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -172,7 +209,7 @@ export function ChatPanel() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--bg-primary)] min-w-[400px]">
-      <div className="glass shrink-0 px-6 flex items-center h-[52px] border-b border-[var(--border)]/50 relative z-10">
+      <div className="glass shrink-0 px-6 flex items-center h-[48px] border-b border-[var(--border)]/50 relative z-10">
         <div className="flex-1 min-w-0">
           {editingTitle ? (
             <input autoFocus value={title} onChange={e=>setTitle(e.target.value)}
@@ -241,7 +278,7 @@ export function ChatPanel() {
           "text-center text-[12px] py-1.5 font-medium transition-all",
           connBanner === "reconnecting" ? "bg-[var(--warning)]/10 text-[var(--warning)]" : "bg-[var(--success)]/10 text-[var(--success)]"
         )}>
-          {connBanner === "reconnecting" ? "⚠️ 连接断开，正在重连…" : "✅ 已重新连接"}
+          {connBanner === "reconnecting" ? "连接断开，正在重连…" : "已重新连接"}
         </div>
       )}
 

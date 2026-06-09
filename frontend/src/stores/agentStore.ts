@@ -9,6 +9,7 @@ export interface AgentItem {
   systemPrompt?: string;
   capabilityTags?: string[];
   isDeletable: boolean;
+  preferredModel?: string;
 }
 
 interface AgentState {

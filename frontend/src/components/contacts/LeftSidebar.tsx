@@ -31,7 +31,7 @@ export function LeftSidebar() {
   const setSelectedContact = useChatStore(s => s.setSelectedContact);
   const [search, setSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<{id:string;name:string;systemPrompt:string;skills:string[];capabilityTags:string[];avatarUrl:string}|null>(null);
+  const [editingAgent, setEditingAgent] = useState<{id:string;name:string;systemPrompt:string;skills:string[];capabilityTags:string[];avatarUrl:string;adapterType:string;preferredModel?:string}|null>(null);
   const [contextMenu, setContextMenu] = useState<{x:number;y:number;agentId:string}|null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>("agents");
@@ -68,6 +68,7 @@ export function LeftSidebar() {
         systemPrompt: (a.system_prompt as string) || "",
         capabilityTags: (a.capability_tags as string[]) || [],
         isDeletable: a.is_deletable as boolean,
+        preferredModel: (a.preferred_model as string) || undefined,
       })));
       if (!selectedContactId && Array.isArray(data) && data.length > 0) setSelectedContact(data[0].id as string);
     }).catch(() => {}).finally(() => setLoading(false));
@@ -185,9 +186,9 @@ export function LeftSidebar() {
     const agent = agents.find(a => a.id === contextMenu.agentId);
     if (agent) {
       fetch(`${API_BASE}/api/agents/${agent.id}`).then(r => r.json()).then(data => {
-        setEditingAgent({ id: agent.id, name: agent.name, systemPrompt: data.system_prompt || "", skills: data.skills || [], capabilityTags: agent.capabilityTags || [], avatarUrl: agent.avatarUrl });
+        setEditingAgent({ id: agent.id, name: agent.name, systemPrompt: data.system_prompt || "", skills: data.skills || [], capabilityTags: agent.capabilityTags || [], avatarUrl: agent.avatarUrl, adapterType: agent.adapterType, preferredModel: agent.preferredModel });
       }).catch(() => {
-        setEditingAgent({ id: agent.id, name: agent.name, systemPrompt: "", skills: [], capabilityTags: agent.capabilityTags || [], avatarUrl: agent.avatarUrl });
+        setEditingAgent({ id: agent.id, name: agent.name, systemPrompt: "", skills: [], capabilityTags: agent.capabilityTags || [], avatarUrl: agent.avatarUrl, adapterType: agent.adapterType, preferredModel: agent.preferredModel });
       });
       setEditorOpen(true);
     }
@@ -316,7 +317,9 @@ export function LeftSidebar() {
             <motion.div key="groups" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
               {groupSessions.filter(s => searchFilter(s.title||"")).length === 0 ? (
                 <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
-                  <div className="text-4xl mb-3">👥</div>
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="19" cy="7" r="4"/><path d="M15 21v-2a4 4 0 0 1 4-4h2"/></svg>
+                  </div>
                   {search ? "无匹配群聊" : "暂无群聊"}
                   <div className="text-[11px] mt-1">{search ? "" : "点击下方按钮创建一个"}</div>
                 </div>
@@ -355,7 +358,9 @@ export function LeftSidebar() {
             <motion.div key="topics" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
               {!selectedContactId ? (
                 <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
-                  <div className="text-4xl mb-3">💬</div>
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
                   请先选择一个助手
                   <div className="text-[11px] mt-1 mb-4">话题需要与助手关联</div>
                   <button onClick={() => setTab("agents")} className="text-[12px] text-[var(--accent)] hover:underline">去选择助手 →</button>
@@ -371,7 +376,9 @@ export function LeftSidebar() {
 
                   {agentTopics.filter(s => searchFilter(s.title||"")).length === 0 ? (
                     <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
-                      <div className="text-4xl mb-3">💬</div>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      </div>
                       暂无话题
                       <div className="text-[11px] mt-1">点击下方按钮创建</div>
                     </div>

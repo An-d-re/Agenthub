@@ -22,6 +22,7 @@ class Agent(Base):
     is_deletable = Column(Boolean, default=True)
     is_temp = Column(Boolean, default=False)  # 临时 Agent，Plan done 时销毁
     encrypted_api_key = Column(Text, nullable=True)  # AES 加密的用户提供 API Key
+    preferred_model = Column(String(100), nullable=True)  # 用户选择的模型变体，为空则用全局设置
 
     def __repr__(self):
         return f"<Agent {self.name} ({self.adapter_type})>"
