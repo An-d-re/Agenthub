@@ -50,19 +50,23 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
     fetch(`${API_BASE}/api/sessions/${activeSessionId}/messages?limit=50`)
       .then(r => { if (!r.ok) throw new Error("fail"); return r.json(); })
       .then(data => {
+        if (!Array.isArray(data)) return;
         const store = useChatStore.getState();
         const existing = store.messages[activeSessionId] || [];
-        if (existing.length === 0 && Array.isArray(data)) {
-          store.setMessages(activeSessionId, data.reverse().map((m: Record<string,unknown>) => ({
-            id: m.id as string, sessionId: m.session_id as string,
-            agentId: m.agent_id as string, agentRole: m.agent_role as string,
-            role: m.role as "user" | "agent" | "system", content: m.content as string,
-            messageType: m.message_type as string, parentId: m.parent_id as string,
-            fileName: m.file_name as string, fileUrl: m.file_url as string,
-            fileSize: m.file_size as number, fileLanguage: m.file_language as string,
-            createdAt: m.created_at as string,
-          })));
-        }
+        const existingIds = new Set(existing.map(m => m.id));
+        const apiMessages = data.map((m: Record<string,unknown>) => ({
+          id: m.id as string, sessionId: m.session_id as string,
+          agentId: m.agent_id as string, agentRole: m.agent_role as string,
+          role: m.role as "user" | "agent" | "system", content: m.content as string,
+          messageType: m.message_type as string, parentId: m.parent_id as string,
+          fileName: m.file_name as string, fileUrl: m.file_url as string,
+          fileSize: m.file_size as number, fileLanguage: m.file_language as string,
+          createdAt: m.created_at as string,
+        }));
+        // 合并：保留 WebSocket 已推送的新消息（API 可能还没包含），去重
+        const wsOnly = existing.filter(m => !existingIds.has(m.id) || m.id.startsWith("local-"));
+        const merged = [...apiMessages, ...wsOnly.filter(m => !apiMessages.some(a => a.id === m.id))];
+        store.setMessages(activeSessionId, merged);
       }).catch(() => setMsgError(true)).finally(() => setMsgLoading(false));
   }, [activeSessionId]);
 

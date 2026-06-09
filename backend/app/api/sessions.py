@@ -439,12 +439,12 @@ async def _build_session_response(session_id: str, db: AsyncSession) -> SessionR
                 "adapter_type": agent.adapter_type,
             })
 
-    # 查询活跃 Plan 及其任务
+    # 查询最新 Plan 及其任务（不限制 status，已完成会话也需展示）
     plan_data = None
     plan_result = await db.execute(
         select(Plan).options(selectinload(Plan.tasks)).where(
-            Plan.session_id == session_id, Plan.status == "active"
-        )
+            Plan.session_id == session_id
+        ).order_by(desc(Plan.created_at)).limit(1)
     )
     plan = plan_result.scalar_one_or_none()
     if plan:
@@ -463,6 +463,7 @@ async def _build_session_response(session_id: str, db: AsyncSession) -> SessionR
             phase=plan.phase,
             status=plan.status,
             selected_approach=plan.selected_approach,
+            approaches=plan.approaches or [],
             tasks=tasks_data,
         )
 

@@ -37,6 +37,7 @@ export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProp
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
   const [applyError, setApplyError] = useState("");
+  const [applyStatus, setApplyStatus] = useState<"success" | "merged" | "conflict" | "">("");
 
   const handleOpen = async () => {
     if (!code && artifact.artifactId) {
@@ -58,15 +59,49 @@ export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProp
     if (!artifact.artifactId) return;
     setApplying(true);
     setApplyError("");
+    setApplyStatus("");
     try {
       const res = await fetch(`${API_BASE}/api/artifacts/${artifact.artifactId}/apply`, { method: "POST" });
+      const data = await res.json();
       if (res.ok) {
         setApplied(true);
-      } else if (res.status === 409) {
-        const data = await res.json();
-        setApplyError(data.detail || "文件冲突，请先处理已有文件");
+        setApplyStatus(data.auto_merged ? "merged" : "success");
+        if (data.auto_merged) {
+          setApplyError("");
+        }
+      } else if (data.conflict && data.auto_merged) {
+        setApplyStatus("conflict");
+        setApplyError(`自动合并后有 ${data.conflict_count || 0} 处冲突，已写入带标记的文件。可点击"强制覆盖"使用 Agent 版本。`);
+        // 展示合并后的内容
+        if (data.merged_content) {
+          setCode(data.merged_content);
+        }
+      } else if (data.conflict) {
+        setApplyStatus("conflict");
+        setApplyError(data.hint || "文件冲突，请先处理已有文件");
       } else {
         setApplyError("应用失败");
+      }
+    } catch {
+      setApplyError("网络错误");
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleForceApply = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!artifact.artifactId) return;
+    setApplying(true);
+    setApplyError("");
+    setApplyStatus("");
+    try {
+      const res = await fetch(`${API_BASE}/api/artifacts/${artifact.artifactId}/apply?force=true`, { method: "POST" });
+      if (res.ok) {
+        setApplied(true);
+        setApplyStatus("success");
+      } else {
+        setApplyError("强制覆盖失败");
       }
     } catch {
       setApplyError("网络错误");
@@ -93,19 +128,32 @@ export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProp
             </Badge>
             <span className="text-[10px] text-muted-foreground">查看 Diff</span>
             {applied ? (
-              <span className="text-[10px] text-[var(--success)] font-medium">✓ 已应用</span>
+              <span className="text-[10px] text-[var(--success)] font-medium">
+                {applyStatus === "merged" ? "✓ 已合并" : "✓ 已应用"}
+              </span>
             ) : (
-              <button
-                onClick={handleApply}
-                disabled={applying}
-                className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-              >
-                {applying ? "应用中..." : "应用"}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleApply}
+                  disabled={applying}
+                  className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+                >
+                  {applying ? "应用中..." : "应用"}
+                </button>
+                {applyStatus === "conflict" && (
+                  <button
+                    onClick={handleForceApply}
+                    disabled={applying}
+                    className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--danger)] text-white hover:bg-red-600 disabled:opacity-50 transition-colors"
+                  >
+                    强制覆盖
+                  </button>
+                )}
+              </div>
             )}
           </div>
           {applyError && (
-            <div className="text-[11px] text-[var(--danger)] mt-1">{applyError}</div>
+            <div className={applyStatus === "conflict" ? "text-[11px] text-amber-600 dark:text-amber-400 mt-1" : "text-[11px] text-[var(--danger)] mt-1"}>{applyError}</div>
           )}
         </div>
       )}

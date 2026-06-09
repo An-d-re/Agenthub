@@ -244,15 +244,40 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
           </div>
         )}
         {isUser && hovered && (
-          <button
-            onClick={handleReply}
-            className="absolute -left-8 top-1 w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all z-10"
-            title="引用回复"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 17 4 12 9 7" /><path d="M4 12h10a6 6 0 0 1 6 6v1" />
-            </svg>
-          </button>
+          <div className="absolute -left-8 top-1 flex flex-col gap-1 z-10">
+            <button
+              onClick={handleReply}
+              className="w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30 transition-all"
+              title="引用回复"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 17 4 12 9 7" /><path d="M4 12h10a6 6 0 0 1 6 6v1" />
+              </svg>
+            </button>
+            <button
+              onClick={async () => {
+                if (pinning) return;
+                setPinning(true);
+                const newPinned = !pinned;
+                try {
+                  await fetch(`${API_BASE}/api/sessions/${message.sessionId}/pins`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pin: newPinned, message_id: message.id }),
+                  });
+                  setPinned(newPinned);
+                } catch {} finally { setPinning(false); }
+              }}
+              className={`w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center transition-all ${
+                pinned ? "text-[var(--accent)] border-[var(--accent)]/30" : "text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30"
+              }`}
+              title="固定消息"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill={pinned ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/>
+              </svg>
+            </button>
+          </div>
         )}
         {/* 深度思考（可折叠） */}
         {!isUser && message.reasoning && (

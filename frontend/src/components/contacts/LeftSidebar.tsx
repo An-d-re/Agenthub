@@ -12,7 +12,7 @@ import { AgentIcon, AgentPlaceholderIcon } from "@/lib/agentIcons";
 import { AgentEditor } from "./AgentEditor";
 import { GroupEditor } from "./GroupEditor";
 
-type TabKey = "agents" | "groups" | "topics";
+type TabKey = "agents" | "groups" | "topics" | "archived";
 
 const AGENT_COLORS: Record<string, string> = {
   deepseek: "from-purple-500 to-indigo-500",
@@ -45,6 +45,7 @@ export function LeftSidebar() {
     agents: useRef<HTMLButtonElement>(null),
     groups: useRef<HTMLButtonElement>(null),
     topics: useRef<HTMLButtonElement>(null),
+    archived: useRef<HTMLButtonElement>(null),
   };
   const [tabIndicator, setTabIndicator] = useState({ left: 12, width: 80 });
 
@@ -77,8 +78,9 @@ export function LeftSidebar() {
   useEffect(() => { const h = () => setContextMenu(null); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, []);
 
   // Sessions by type
-  const groupSessions = sessions.filter(s => s.type === "group");
-  const singleSessions = sessions.filter(s => s.type === "single");
+  const groupSessions = sessions.filter(s => s.type === "group" && s.status !== "archived");
+  const singleSessions = sessions.filter(s => s.type === "single" && s.status !== "archived");
+  const archivedSessions = sessions.filter(s => s.status === "archived");
 
   // Topics (= single sessions) for the selected agent
   const agentTopics = selectedContactId
@@ -109,6 +111,23 @@ export function LeftSidebar() {
         return 0;
       });
       store.setSessions(updated);
+    } catch {
+      // 网络错误，静默失败
+    }
+  };
+
+  const handleToggleArchive = async (e: React.MouseEvent, s: typeof sessions[0]) => {
+    e.stopPropagation();
+    try {
+      const r = await fetch(`${API_BASE}/api/sessions/${s.id}/archive`, { method: "PUT" });
+      if (!r.ok) return;
+      const result = await r.json();
+      const store = useChatStore.getState();
+      const updated = store.sessions.map(session =>
+        session.id === s.id ? { ...session, status: result.status } : session
+      );
+      store.setSessions(updated);
+      if (activeSessionId === s.id) setActiveSession("");
     } catch {
       // 网络错误，静默失败
     }
@@ -219,6 +238,7 @@ export function LeftSidebar() {
       case "topics": return selectedContactId
         ? { label: "+ 新建话题", onClick: handleNewTopic, disabled: false }
         : { label: "请先选择一个助手", onClick: () => { setTab("agents"); }, disabled: true };
+      default: return null;
     }
   })();
 
@@ -226,6 +246,7 @@ export function LeftSidebar() {
     { key: "agents", label: "助手" },
     { key: "groups", label: "群聊" },
     { key: "topics", label: "话题" },
+    { key: "archived", label: "已归档" },
   ];
 
   const tabIcon = (key: TabKey) => {
@@ -234,6 +255,7 @@ export function LeftSidebar() {
       case "agents": return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="17" cy="11" r="4"/><path d="M23 21v-2a4 4 0 0 0-4-4h-2"/></svg>;
       case "groups": return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="19" cy="7" r="4"/><path d="M15 21v-2a4 4 0 0 1 4-4h2"/></svg>;
       case "topics":  return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+      case "archived": return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>;
     }
   };
 
@@ -343,6 +365,9 @@ export function LeftSidebar() {
                       <button onClick={e=>handleTogglePin(e,s)} className={cn("shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-[var(--accent)]/10", s.pinnedAt ? "" : "opacity-0 group-hover:opacity-100")}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill={s.pinnedAt ? "var(--accent)" : "none"} stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/></svg>
                       </button>
+                      <button onClick={e=>handleToggleArchive(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-blue-50/20 text-[var(--text-tertiary)] hover:text-blue-500" title="归档">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                      </button>
                       <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
@@ -402,6 +427,9 @@ export function LeftSidebar() {
                           <button onClick={e=>handleTogglePin(e,s)} className={cn("shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-[var(--accent)]/10", s.pinnedAt ? "" : "opacity-0 group-hover:opacity-100")}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill={s.pinnedAt ? "var(--accent)" : "none"} stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/></svg>
                       </button>
+                      <button onClick={e=>handleToggleArchive(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-blue-50 dark:hover:bg-blue-50/20 text-[var(--text-tertiary)] hover:text-blue-500" title="归档">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                      </button>
                       <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                           </button>
@@ -413,10 +441,47 @@ export function LeftSidebar() {
               )}
             </motion.div>
           )}
+
+          {/* ── 已归档 Tab ── */}
+          {tab === "archived" && (
+            <motion.div key="archived" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
+              {archivedSessions.length === 0 ? (
+                <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                  </div>
+                  暂无已归档会话
+                  <div className="text-[11px] mt-1">归档的会话不会出现在常规列表中</div>
+                </div>
+              ) : (
+                archivedSessions.filter(s => searchFilter(s.title||"")).map(s => {
+                  const isActive = activeSessionId === s.id;
+                  const isGroup = s.type === "group";
+                  return (
+                    <div key={s.id} onClick={() => setActiveSession(s.id)}
+                      className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
+                      {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[var(--bg-tertiary)] opacity-50">
+                        <span className="text-sm font-bold text-[var(--text-secondary)]">{isGroup ? "#" : "@"}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[15px] font-medium truncate dark:text-[var(--text-primary)] opacity-60">{s.title||(isGroup ? "群聊" : "对话")}</span>
+                        <div className="text-[12px] text-[var(--text-secondary)]">{isGroup ? `群聊 · ${s.agentCount}人` : "单聊"}</div>
+                      </div>
+                      <button onClick={e=>handleToggleArchive(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-green-50 dark:hover:bg-green-50/20 text-[var(--text-tertiary)] hover:text-green-500" title="取消归档">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </motion.div>
+          )}
         </AnimatePresence>
       </ScrollArea>
 
       {/* Bottom button */}
+      {bottomBtn && (
       <div className="p-3 shrink-0">
         <button
           onClick={bottomBtn.onClick}
@@ -431,6 +496,7 @@ export function LeftSidebar() {
           {bottomBtn.label}
         </button>
       </div>
+      )}
 
       {/* Agent Editor */}
       <AgentEditor open={editorOpen} onClose={() => setEditorOpen(false)} editAgent={editingAgent} />

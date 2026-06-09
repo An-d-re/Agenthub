@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 from app.core.event_bus import event_bus
 from app.models.agent import Agent
-from app.models.message import Message
+from app.models.message import Message, PinnedMessage
 from app.models.plan import Plan
 from app.models.session import SessionAgent
 from app.models.task import Task, TaskDependency
@@ -330,10 +330,25 @@ class BasePhaseHandler:
             .limit(limit)
         )
         msgs = list(reversed(result.scalars().all()))
-        return [
+        history = [
             {"role": "assistant" if m.role == "agent" else m.role, "content": m.content}
             for m in msgs
         ]
+        # 注入 Pin 消息作为上下文
+        pinned_result = await db.execute(
+            select(Message)
+            .join(PinnedMessage, PinnedMessage.message_id == Message.id)
+            .where(PinnedMessage.session_id == session_id)
+            .order_by(PinnedMessage.pinned_at)
+        )
+        pinned_msgs = pinned_result.scalars().all()
+        if pinned_msgs:
+            pinned_content = "以下是用户固定的重要消息，请在回答时优先参考：\n"
+            for i, pm in enumerate(pinned_msgs, 1):
+                role_label = "用户" if pm.role == "user" else "助手"
+                pinned_content += f"\n[{i}] {role_label}: {pm.content}\n"
+            history.insert(0, {"role": "system", "content": pinned_content})
+        return history
 
     async def _send_system_message(
         self, db: AsyncSession, session_id: str, content: str,

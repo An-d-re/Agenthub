@@ -104,39 +104,43 @@ export function ChatPanel() {
       const ids = (data.agents || []).map((a: {agent_id:string}) => a.agent_id);
       store.initSessionAgents(activeSessionId, ids);
 
-      // 恢复任务状态（页面刷新后从 DB 重新加载）
+      // 恢复任务状态（页面刷新/切换会话后从 DB 重新加载）
       const planTasks = data.plan?.tasks;
       if (planTasks && planTasks.length > 0) {
-        const existingTasks = store.tasks[activeSessionId] || [];
-        // WebSocket 推送的任务优先（更实时），API 恢复的作为补充
-        if (existingTasks.length === 0) {
-          store.setTasks(activeSessionId, planTasks.map((t: Record<string,unknown>) => ({
-            taskId: t.task_id as string,
-            title: t.title as string,
-            status: t.status as TaskItem["status"],
-            agentId: t.assigned_agent_id as string,
-            startedAt: t.started_at as string,
-            completedAt: t.completed_at as string,
-          })));
-        }
+        // 切回已访问过的会话时也要用 API 状态覆盖旧任务（防止 running/reviewing 残留）
+        store.setTasks(activeSessionId, planTasks.map((t: Record<string,unknown>) => ({
+          taskId: t.task_id as string,
+          title: t.title as string,
+          status: t.status as TaskItem["status"],
+          agentId: t.assigned_agent_id as string,
+          startedAt: t.started_at as string,
+          completedAt: t.completed_at as string,
+        })));
 
-        // 恢复 confirmedPlan（如果处于 executing 阶段）
-        if (data.plan?.phase === "executing" && !store.confirmedPlans[activeSessionId]) {
-          const dagTasks = planTasks.map((t: Record<string,unknown>) => ({
-            id: t.task_id as string,
-            title: t.title as string,
-            description: "",
-            dependencies: [] as string[],
-            required_capability: "",
-            executor_type: "existing" as const,
-            agent_id: t.assigned_agent_id as string,
-            agent_name: "",
-            match_reason: "",
-            selected_agent_id: t.assigned_agent_id as string,
-            db_id: t.task_id as string,
-          }));
-          store.setConfirmedPlan(activeSessionId, { tasks: dagTasks, hint: "" });
-        }
+        // 恢复 confirmedPlan（不限 phase，已完成会话也需展示 DAG）
+        const dagTasks = planTasks.map((t: Record<string,unknown>) => ({
+          id: t.task_id as string,
+          title: t.title as string,
+          description: "",
+          dependencies: [] as string[],
+          required_capability: "",
+          executor_type: "existing" as const,
+          agent_id: t.assigned_agent_id as string,
+          agent_name: "",
+          match_reason: "",
+          selected_agent_id: t.assigned_agent_id as string,
+          db_id: t.task_id as string,
+        }));
+        store.setConfirmedPlan(activeSessionId, { tasks: dagTasks, hint: "" });
+      }
+
+      // 恢复 plan 方案对比卡片（不限 phase）
+      if (data.plan?.approaches && data.plan.approaches.length > 0) {
+        store.setPlan(activeSessionId, {
+          messageId: "",
+          approaches: data.plan.approaches,
+          selectedApproach: data.plan.selected_approach,
+        });
       }
     }).catch(() => {});
     return () => { cancelled = true; };

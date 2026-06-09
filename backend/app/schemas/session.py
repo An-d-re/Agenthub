@@ -36,6 +36,7 @@ class PlanResponse(BaseModel):
     phase: str = "clarify"
     status: str = "active"
     selected_approach: Optional[str] = None
+    approaches: list = []
     tasks: list[TaskStatusResponse] = []
 
     model_config = {"from_attributes": True}

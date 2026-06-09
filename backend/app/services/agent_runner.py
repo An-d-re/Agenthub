@@ -9,7 +9,7 @@ from app.core.artifact_utils import extract_code_blocks, create_artifacts_from_b
 from app.core.database import async_session
 from app.core.event_bus import event_bus
 from app.models.agent import Agent
-from app.models.message import Message
+from app.models.message import Message, PinnedMessage
 from app.models.session import SessionAgent
 from app.services.adapters import create_adapter
 from app.services.adapters.base import AgentContext, AgentRole
@@ -48,6 +48,21 @@ async def run_agent_reply(session_id: str, user_message: str):
             {"role": m.role if m.role != "agent" else "assistant", "content": m.content}
             for m in history[:-1]  # 排除刚保存的用户消息
         ]
+
+        # 注入 Pin 消息作为上下文
+        pinned_result = await db.execute(
+            select(Message)
+            .join(PinnedMessage, PinnedMessage.message_id == Message.id)
+            .where(PinnedMessage.session_id == session_id)
+            .order_by(PinnedMessage.pinned_at)
+        )
+        pinned_msgs = pinned_result.scalars().all()
+        if pinned_msgs:
+            pinned_content = "以下是用户固定的重要消息，请在回答时优先参考：\n"
+            for i, pm in enumerate(pinned_msgs, 1):
+                role_label = "用户" if pm.role == "user" else "助手"
+                pinned_content += f"\n[{i}] {role_label}: {pm.content}\n"
+            conversation.insert(0, {"role": "system", "content": pinned_content})
 
     # Create adapter
     adapter = create_adapter(agent.adapter_type)
