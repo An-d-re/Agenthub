@@ -53,6 +53,6 @@ ai-collaboration/
 venv/
 .venv/
 
-./claude
+.claude/
 CLAUDE.md
 .gstack/

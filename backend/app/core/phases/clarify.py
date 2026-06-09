@@ -142,27 +142,40 @@ class ClarifyHandler(BasePhaseHandler):
         clarify_round += 1
         ctx.plan.clarify_round = clarify_round
 
-        if clarify_round == 1 and self._critic_has_signaled_done(content):
+        # Critic 自己确认需求已明确 + 没有在问新问题 → 自动推进
+        if self._critic_has_confirmed(content):
             ctx.plan.phase = "comparison"
             ctx.plan.task_dag = {}
             ctx.plan.clarify_round = 0
-            return "comparison"
-
-        if clarify_round >= self.MAX_CLARIFY_ROUNDS:
-            ctx.plan.phase = "comparison"
-            ctx.plan.task_dag = {}
-            ctx.plan.clarify_round = 0
+            await self._send_system_message(
+                ctx.db, ctx.plan.session_id, "需求已明确，正在生成方案…",
+                pending_events=ctx.pending_events,
+            )
             return "comparison"
 
         return None
 
-    def _critic_has_signaled_done(self, content: str) -> bool:
-        signals = [
-            "不再需要澄清", "可以往下推进", "需求已经明确", "需求已明确",
-            "可以推进到方案阶段", "可以开始了", "准备好了",
-            "no further clarification", "ready to proceed", "requirements are clear",
-            "ready to move on", "no more questions", "i am ready",
-            "assumptions", "proceed with", "move forward",
-        ]
-        lower = content.lower()
-        return any(s.lower() in lower for s in signals)
+    def _critic_has_confirmed(self, content: str) -> bool:
+        """Critic 在回复中放了 [READY] 标记，表示需求已明确。
+        但如果仍在向用户提问，即使有 [READY] 也不推进。"""
+        if "[READY]" not in content:
+            return False
+        if self._is_still_asking(content):
+            return False
+        return True
+
+    @staticmethod
+    def _is_still_asking(content: str) -> bool:
+        """检测回复中是否仍在向用户提问（含问号、编号问题、请求确认）。"""
+        # 排除代码块
+        lines = [l for l in content.split("\n") if not l.strip().startswith("```")]
+        text = "\n".join(lines)
+        if "?" in text or "？" in text:
+            return True
+        # 编号问题模式：1. xxx / 2) xxx / 1、xxx
+        if re.search(r"(?:^|\n)\s*\d+[\.\)、]\s", text):
+            return True
+        # 请求用户提供更多信息
+        if re.search(r"请(?:确认|回复|说明|提供|描述|告诉|选择|输入|补充|明确)", text):
+            return True
+        return False
