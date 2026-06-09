@@ -1,6 +1,7 @@
 """Deployment REST API — 一键部署 HTML 制品。"""
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.event_bus import event_bus
 from app.models.artifact import Artifact
 from app.models.deployment import Deployment
 
@@ -85,6 +87,20 @@ async def create_deployment(
     deployment.port = 0
     await db.commit()
     await db.refresh(deployment)
+
+    # 发布部署状态消息到聊天流
+    await event_bus.publish(session_id, {
+        "type": "chat.message",
+        "session_id": session_id,
+        "payload": {
+            "id": f"deploy-{deployment.id}",
+            "role": "system",
+            "content": deployment.status,
+            "message_type": "deployment",
+            "file_url": deployment.url,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
+    })
 
     return {
         "id": deployment.id,

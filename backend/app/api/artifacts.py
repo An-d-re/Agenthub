@@ -77,8 +77,12 @@ async def list_session_artifacts(
 
 
 @router.post("/{artifact_id}/apply")
-async def apply_artifact(artifact_id: str, db: AsyncSession = Depends(get_db)):
-    """将 artifact 的代码写入 workspaces 目录。若文件已存在则返回冲突。"""
+async def apply_artifact(artifact_id: str, force: bool = False, db: AsyncSession = Depends(get_db)):
+    """将 artifact 的代码写入 workspaces 目录。
+
+    - force=false: 冲突时返回已有内容供对比
+    - force=true: 直接覆盖已有文件
+    """
     artifact = await db.get(Artifact, artifact_id)
     if not artifact:
         raise HTTPException(404, "Artifact not found")
@@ -93,11 +97,16 @@ async def apply_artifact(artifact_id: str, db: AsyncSession = Depends(get_db)):
     if not str(target_path).startswith(str(session_dir) + os.sep) and target_path != session_dir:
         raise HTTPException(403, "路径访问被拒绝")
 
-    if target_path.exists():
-        raise HTTPException(
-            409,
-            f"文件 {artifact.file_path} 已存在，请先手动处理冲突后再应用新的 Diff",
-        )
+    if target_path.exists() and not force:
+        existing = target_path.read_text(encoding="utf-8")
+        return {
+            "ok": False,
+            "conflict": True,
+            "file_path": artifact.file_path,
+            "existing_content": existing[:10000],
+            "modified_content": artifact.modified_content[:10000],
+            "hint": "文件已存在。传 force=true 直接覆盖，或手动合并。",
+        }
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(artifact.modified_content, encoding="utf-8")
