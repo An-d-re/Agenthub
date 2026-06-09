@@ -41,10 +41,9 @@ test-cases/
 backend/test_session_id.txt
 tests/test-output/
 
-# Staff notes (keep req.md in git)
+# Staff notes
 改进.md
-
-# AI collaboration records — competition submission material
+aico.md
 
 # Python
 *.egg-info/
@@ -52,6 +51,8 @@ tests/test-output/
 venv/
 .venv/
 
-.claude/
-CLAUDE.md
+# Claude Code local config (never commit personal settings)
+.claude/settings.local.json
+
+# GStack
 .gstack/
