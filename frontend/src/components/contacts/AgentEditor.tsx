@@ -211,9 +211,9 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
                 </label>
                 <div className="flex gap-2 mb-3">
                   {[
-                    { key: "deepseek", name: "DeepSeek", color: "from-purple-500 to-indigo-500" },
-                    { key: "anthropic", name: "Anthropic", color: "from-amber-400 to-orange-500" },
-                    { key: "opencode", name: "OpenCode", color: "from-blue-400 to-cyan-500" },
+                    { key: "deepseek", name: "DeepSeek", gradient: "from-purple-500 to-indigo-500" },
+                    { key: "anthropic", name: "Anthropic", gradient: "from-amber-400 to-orange-500" },
+                    { key: "opencode", name: "OpenCode", gradient: "from-blue-400 to-cyan-500" },
                   ].map(m => (
                     <button
                       key={m.key}

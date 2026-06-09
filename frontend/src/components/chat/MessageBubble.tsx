@@ -11,6 +11,7 @@ import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { AgentIcon } from "@/lib/agentIcons";
 import { CodeBlock } from "./CodeBlock";
 import { FileCard } from "@/components/cards/FileCard";
+import { DeployCard } from "@/components/cards/DeployCard";
 
 // ── 深度思考折叠块 ──
 
@@ -106,6 +107,8 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
   const agents = useAgentStore(s => s.agents);
   const setReplyTarget = useChatStore(s => s.setReplyTarget);
   const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [pinning, setPinning] = useState(false);
   const msgAgent = message.agentId ? agents.find(a => a.id === message.agentId) || null : null;
 
   const getAgentName = (agentId?: string) => {
@@ -136,6 +139,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
   const isModify = message.messageType === "modify";
   const isImage = message.messageType === "image";
   const isFile = message.messageType === "file";
+  const isDeploy = message.messageType === "deployment";
 
   const handleReply = () => {
     setReplyTarget({
@@ -214,6 +218,29 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
                 </svg>
               </button>
             )}
+            <button
+              onClick={async () => {
+                if (pinning) return;
+                setPinning(true);
+                const newPinned = !pinned;
+                try {
+                  await fetch(`${API_BASE}/api/sessions/${message.sessionId}/pins`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ pin: newPinned, message_id: message.id }),
+                  });
+                  setPinned(newPinned);
+                } catch {} finally { setPinning(false); }
+              }}
+              className={`w-7 h-7 rounded-full bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] dark:border-[var(--border)] shadow-sm flex items-center justify-center transition-all ${
+                pinned ? "text-[var(--accent)] border-[var(--accent)]/30" : "text-[var(--text-secondary)] hover:text-[var(--accent)] hover:border-[var(--accent)]/30"
+              }`}
+              title="固定消息"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill={pinned ? "var(--accent)" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/>
+              </svg>
+            </button>
           </div>
         )}
         {isUser && hovered && (
@@ -259,6 +286,11 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
                 <div className="text-[11px] text-[var(--text-secondary)] mt-1.5 truncate">{message.fileName}</div>
               )}
             </div>
+          ) : isDeploy ? (
+            <DeployCard
+              url={message.fileUrl}
+              status={message.content || "deployed"}
+            />
           ) : isFile && message.fileUrl ? (
             message.fileLanguage ? (
               <FileCard message={message} />

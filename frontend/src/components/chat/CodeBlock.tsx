@@ -15,7 +15,14 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
   const [selStart, setSelStart] = useState<number | null>(null);
   const [selEnd, setSelEnd] = useState<number | null>(null);
   const [instruction, setInstruction] = useState("");
+  const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleLineClick = (lineIdx: number) => {
     if (selStart === null) {
@@ -70,7 +77,18 @@ export function CodeBlock({ code, language, messageId, onModify }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-[#2D2D2F] border-b border-[#3D3D3F]">
         <span className="text-[11px] text-[var(--text-secondary)] font-mono">{language || "code"}</span>
-        <span className="text-[10px] text-[#6E6E70]">点击行号选择要修改的行</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] text-[#6E6E70]">点击行号选择要修改的行</span>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 text-[10px] text-[#6E6E70] hover:text-[var(--accent)] transition-colors"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            {copied ? "已复制" : "复制"}
+          </button>
+        </div>
       </div>
 
       {/* Code lines */}
