@@ -86,7 +86,7 @@ export function TaskPipeline() {
       {/* Header + Progress */}
       <div className="shrink-0 px-4 py-4 border-b border-[var(--border)] dark:border-[#38383A]/50">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[15px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">
+          <h3 className="text-[15px] font-semibold text-[var(--text-primary)] dark:text-[var(--text-primary)]">
             Pipeline
           </h3>
           <span className="text-[12px] text-[var(--text-secondary)] tabular-nums">
@@ -158,7 +158,7 @@ export function TaskPipeline() {
                         "text-[14px] font-medium truncate flex-1",
                         t.status === "done"
                           ? "text-[var(--text-secondary)] line-through"
-                          : "text-[var(--text-primary)] dark:text-[var(--bg-secondary)]",
+                          : "text-[var(--text-primary)] dark:text-[var(--text-primary)]",
                       )}
                     >
                       {t.title}
@@ -212,14 +212,14 @@ export function TaskPipeline() {
                     {t.description && (
                       <div>
                         <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase mb-1">描述</div>
-                        <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{t.description}</div>
+                        <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--text-primary)]">{t.description}</div>
                       </div>
                     )}
                     <div className="flex flex-wrap gap-4">
                       {agentName && (
                         <div>
                           <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase">Agent</div>
-                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{agentName}</div>
+                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--text-primary)]">{agentName}</div>
                         </div>
                       )}
                       <div>
@@ -229,14 +229,14 @@ export function TaskPipeline() {
                       {latency !== "" && (
                         <div>
                           <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase">耗时</div>
-                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">
+                          <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--text-primary)]">
                             {latency !== null ? latency : <ElapsedTimer startedAt={t.startedAt!} />}
                           </div>
                         </div>
                       )}
                       <div>
                         <div className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase">重试</div>
-                        <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{t.retryCount ?? 0} 次</div>
+                        <div className="text-[13px] text-[var(--text-primary)] dark:text-[var(--text-primary)]">{t.retryCount ?? 0} 次</div>
                       </div>
                     </div>
                     {t.error && (

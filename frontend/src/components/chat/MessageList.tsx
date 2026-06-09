@@ -16,9 +16,11 @@ interface Props {
 
 export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }: Props) {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
+  const sessions = useChatStore((s) => s.sessions);
   const messages = useChatStore((s) =>
     activeSessionId ? (s.messages[activeSessionId] || EMPTY_ARRAY) : EMPTY_ARRAY
   );
+  const activeSession = sessions.find(s => s.id === activeSessionId);
   const plan = useChatStore((s) =>
     activeSessionId ? s.plans[activeSessionId] : undefined
   );
@@ -89,8 +91,10 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
 
   if (!activeSessionId) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        选择一个会话开始聊天
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-[var(--text-tertiary)]">
+        <div className="text-[64px] leading-none opacity-20">#</div>
+        <div className="text-[15px] font-medium">从左侧选择一个 Agent 或群聊开始</div>
+        <div className="text-[12px] text-[var(--text-tertiary)]/70">试试直接说出你想做什么，比如「帮我写一个网页倒计时」</div>
       </div>
     );
   }
@@ -138,9 +142,36 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
       )}
 
       {!msgLoading && messages.length === 0 && !showDagEditor && !msgError && (
-        <div className="text-center text-[var(--text-tertiary)] mt-12">
-          <div className="text-4xl mb-3">💬</div>
-          发送消息开始对话
+        <div className="text-center mt-12 px-8">
+          <div className="text-[64px] leading-none mb-4 opacity-15">{activeSession?.type === "group" ? "#" : "@"}</div>
+          <div className="text-[15px] font-medium text-[var(--text-secondary)] mb-5">
+            {activeSession?.type === "group" ? "描述你的需求，Orchestrator 会协调多位 Agent 协作" : "直接告诉 Agent 你想做什么"}
+          </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[
+              "帮我做一个番茄钟网页",
+              "写一个 Python 爬虫抓取天气数据",
+              "解释一下 Transformer 注意力机制",
+              "帮我分析这份数据的趋势",
+            ].map(example => (
+              <button
+                key={example}
+                onClick={() => {
+                  const inputEl = document.querySelector<HTMLTextAreaElement>("textarea[placeholder*='输入消息']");
+                  if (inputEl) {
+                    // 触发展开 MessageInput 中的 @ mention 或直接设置文本
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+                    nativeInputValueSetter?.call(inputEl, example);
+                    inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+                    inputEl.focus();
+                  }
+                }}
+                className="px-3 py-1.5 rounded-full text-[12px] text-[var(--text-secondary)] bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:text-[var(--accent)] transition-all"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {displayMessages.map((msg, i) => (

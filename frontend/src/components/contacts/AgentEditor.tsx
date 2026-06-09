@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAgentStore } from "@/stores/agentStore";
 import { API_BASE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { AgentPlaceholderIcon } from "@/lib/agentIcons";
 
 const PRESET_SKILLS = [
   { id: "code-generation", label: "代码生成", icon: "📝", tag: "代码生成" },
@@ -118,7 +119,7 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/10" onClick={onClose} />
       {/* Slide-in panel */}
-      <div className="relative ml-auto w-[min(720px,65vw)] h-full bg-white dark:bg-[var(--bg-primary)] shadow-2xl animate-slide-in-right flex flex-col text-[var(--text-primary)] dark:text-[var(--bg-secondary)]"
+      <div className="relative ml-auto w-[min(720px,65vw)] h-full bg-white dark:bg-[var(--bg-primary)] shadow-2xl animate-slide-in-right flex flex-col text-[var(--text-primary)] dark:text-[var(--text-primary)]"
         style={{ animation: "slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border)]">
@@ -126,7 +127,7 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
             <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)]">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m15 18-6-6 6-6"/></svg>
             </button>
-            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{editAgent ? "编辑 Agent" : "创建自定义 Agent"}</h2>
+            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--text-primary)]">{editAgent ? "编辑 Agent" : "创建自定义 Agent"}</h2>
           </div>
           <button onClick={handleSave} disabled={saving || !name.trim()}
             className="px-6 py-2.5 rounded-[12px] bg-[var(--accent)] text-white text-[14px] font-medium hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
@@ -143,7 +144,7 @@ export function AgentEditor({ open, onClose, editAgent, onCreated }: Props) {
                 "w-20 h-20 rounded-full flex items-center justify-center text-3xl",
                 avatarUrl ? "bg-cover bg-center" : "bg-[var(--bg-secondary)]"
               )} style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : {}}>
-                {!avatarUrl && "👤"}
+                {!avatarUrl && <AgentPlaceholderIcon size={20} />}
               </div>
               <button onClick={() => {
                 const url = prompt("输入头像 URL:");

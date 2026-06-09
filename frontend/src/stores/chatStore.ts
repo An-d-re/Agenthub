@@ -13,9 +13,9 @@ export interface ChatMessage {
   parentId?: string;
   codeSelection?: { start_line: number; end_line: number; message_id: string };
   fileName?: string;
+  fileLanguage?: string;
   fileUrl?: string;
   fileSize?: number;
-  fileLanguage?: string;
   createdAt: string;
 }
 
@@ -27,6 +27,7 @@ export interface SessionItem {
   agentCount: number;
   agentIds: string[];
   lastMessagePreview: string;
+  pinnedAt?: string;
 }
 
 export interface Approach {

@@ -120,7 +120,7 @@ export function GroupEditor({ open, onClose }: Props) {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--bg-secondary)]">{agent.name}</div>
+                      <div className="text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--text-primary)]">{agent.name}</div>
                       <div className="text-[11px] text-[var(--text-secondary)]">{agent.adapterType}</div>
                     </div>
                   </button>

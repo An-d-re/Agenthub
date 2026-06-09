@@ -69,7 +69,7 @@ export function TracePanel() {
           <select
             value={selectedTrace || ""}
             onChange={e => setSelectedTrace(e.target.value || null)}
-            className="mt-2 w-full text-[11px] bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] dark:text-[var(--bg-secondary)] border-0 rounded-lg px-2 py-1.5 outline-none"
+            className="mt-2 w-full text-[11px] bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] dark:text-[var(--text-primary)] border-0 rounded-lg px-2 py-1.5 outline-none"
           >
             <option value="">全部 Trace ({sortedTraces.length})</option>
             {sortedTraces.map(([tid, tSpans]) => (
@@ -107,7 +107,7 @@ export function TracePanel() {
                     style={{ paddingLeft: `${16 + indent}px` }}>
                     <div className="flex items-center gap-2 text-[11px]">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                      <span className="flex-1 truncate font-mono dark:text-[var(--bg-secondary)]">{s.operation_name}</span>
+                      <span className="flex-1 truncate font-mono dark:text-[var(--text-primary)]">{s.operation_name}</span>
                       <span className={cn("tabular-nums", isError ? "text-[var(--danger)]" : "text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)]")}>
                         {ms(s.duration_ms || 0)}
                       </span>

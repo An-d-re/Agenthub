@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { LeftSidebar } from "@/components/contacts/LeftSidebar";
 import { Cover } from "@/components/Cover";
 import { ChatPanel } from "@/components/chat/ChatPanel";
-import { TaskPipeline } from "@/components/tasks/TaskPipeline";
+import { CollaborationStage } from "@/components/tasks/CollaborationStage";
 import { TracePanel } from "@/components/trace/TracePanel";
 import { useTheme } from "@/hooks/useTheme";
 import { useContacts } from "@/hooks/useContacts";
@@ -18,11 +18,11 @@ function RightPanel() {
   return (
     <div className="flex flex-col h-full bg-[var(--bg-primary)]">
       <div className="flex px-4 pt-4 pb-0 gap-1">
-        <button onClick={()=>setTab("tasks")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="tasks"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[var(--text-secondary)] dark:hover:text-[var(--bg-secondary)]"}`}>任务</button>
+        <button onClick={()=>setTab("tasks")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="tasks"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[var(--text-secondary)] dark:hover:text-[var(--bg-secondary)]"}`}>协作</button>
         <button onClick={()=>setTab("traces")} className={`px-3 py-1.5 text-[12px] font-medium rounded-full transition-colors ${tab==="traces"?"bg-[var(--accent)] text-white":"text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:text-[var(--text-secondary)] dark:hover:text-[var(--bg-secondary)]"}`}>追踪</button>
       </div>
       <div className="flex-1 overflow-hidden mt-3">
-        {tab === "tasks" ? <TaskPipeline /> : <TracePanel />}
+        {tab === "tasks" ? <CollaborationStage /> : <TracePanel />}
       </div>
     </div>
   );

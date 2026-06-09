@@ -59,17 +59,20 @@ const roleIcon = (role: string) => {
 };
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; bubble: string }> = {
-  critic:    { label: "Critic",   color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  // 决策层 — 琥珀/金色
+  critic:    { label: "Critic",   color: "text-[var(--accent)]",        bg: "bg-[var(--accent)]/8",     bubble: "bg-[var(--accent)]/5" },
   planner:   { label: "Planner",  color: "text-[var(--accent)]",        bg: "bg-[var(--accent)]/8",     bubble: "bg-[var(--accent)]/5" },
-  coder:     { label: "Coder",    color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
-  code:      { label: "编码",     color: "text-[#AF52DE]",              bg: "bg-[#AF52DE]/8",           bubble: "bg-[#AF52DE]/5" },
+  // 执行层 — 中性色
+  coder:     { label: "Coder",    color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  code:      { label: "编码",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  write:     { label: "写作",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  calculate: { label: "计算",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  design:    { label: "设计",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  analyze:   { label: "分析",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  data:      { label: "数据",     color: "text-[var(--text-secondary)]", bg: "bg-[var(--bg-tertiary)]", bubble: "bg-[var(--bg-tertiary)]" },
+  // 审查层 — 绿色
   reviewer:  { label: "Reviewer", color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
   verify:    { label: "验证",     color: "text-[var(--success)]",       bg: "bg-[var(--success)]/8",    bubble: "bg-[var(--success)]/5" },
-  calculate: { label: "计算",     color: "text-[#FF9500]",              bg: "bg-[#FF9500]/8",           bubble: "bg-[#FF9500]/5" },
-  design:    { label: "设计",     color: "text-[#007AFF]",              bg: "bg-[#007AFF]/8",           bubble: "bg-[#007AFF]/5" },
-  analyze:   { label: "分析",     color: "text-[#30B0C7]",              bg: "bg-[#30B0C7]/8",           bubble: "bg-[#30B0C7]/5" },
-  write:     { label: "写作",     color: "text-[#FF375F]",              bg: "bg-[#FF375F]/8",           bubble: "bg-[#FF375F]/5" },
-  data:      { label: "数据",     color: "text-[#5856D6]",              bg: "bg-[#5856D6]/8",           bubble: "bg-[#5856D6]/5" },
 };
 
 interface Props {
@@ -218,12 +221,12 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
           isUser
             ? "bg-[var(--accent)] text-white rounded-br-[4px]"
             : isModify
-              ? "bg-[#FFF3E0] dark:bg-[#3D2910] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px] border border-[#FFCC80] dark:border-[#664400]"
+              ? "bg-[#FFF3E0] dark:bg-[#3D2910] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px] border border-[#FFCC80] dark:border-[#664400]"
               : message.agentRole && ROLE_CONFIG[message.agentRole]
-                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]`
+                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]`
                 : isImage || isFile
-                ? "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
-                : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--bg-secondary)] rounded-bl-[4px]"
+                ? "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]"
+                : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]"
         )}>
           {/* 被引用消息预览 */}
           {quotedMessage && !isImage && !isFile && (

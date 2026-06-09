@@ -5,6 +5,7 @@ import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore } from "@/stores/chatStore";
 import { API_BASE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { AgentIcon } from "@/lib/agentIcons";
 
 interface Props { onSend: (content: string, quoteMessageId?: string) => void; disabled?: boolean; isThinking?: boolean; onStop?: () => void; }
 
@@ -18,8 +19,16 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeSessionId = useChatStore(s => s.activeSessionId);
+  const sessions = useChatStore(s => s.sessions);
+  const sessionAgentIds = useChatStore(s => s.sessionAgentIds[activeSessionId || ""]);
   const replyTarget = useChatStore(s => s.replyTarget);
   const setReplyTarget = useChatStore(s => s.setReplyTarget);
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const isGroup = activeSession?.type === "group";
+  const groupAgents = isGroup && sessionAgentIds
+    ? agents.filter(a => sessionAgentIds.includes(a.id))
+    : [];
 
   const filteredAgents = mention.active
     ? agents.filter(a => a.name.toLowerCase().includes(mention.query.toLowerCase()))
@@ -127,6 +136,31 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           </button>
         </div>
       )}
+      {/* Agent 快捷栏 — 群聊模式下显示，点击直接 @ */}
+      {isGroup && groupAgents.length > 0 && (
+        <div className="flex items-center gap-1.5 mb-2 overflow-x-auto">
+          {groupAgents.map(agent => (
+            <button
+              key={agent.id}
+              onClick={() => {
+                setText(prev => prev + (prev ? " " : "") + `@${agent.name} `);
+                textareaRef.current?.focus();
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:bg-[var(--accent)]/5 transition-all shrink-0 click-press"
+            >
+              <div className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center text-white",
+                agent.adapterType === "deepseek" ? "bg-gradient-to-br from-purple-500 to-indigo-500" :
+                agent.adapterType === "anthropic" ? "bg-gradient-to-br from-amber-400 to-orange-500" :
+                "bg-gradient-to-br from-blue-400 to-cyan-500"
+              )}>
+                <AgentIcon adapterType={agent.adapterType} size={12} />
+              </div>
+              <span className="text-[12px] font-medium text-[var(--text-secondary)]">{agent.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex items-end gap-2 bg-[var(--bg-secondary)] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-[var(--bg-primary)] transition-all duration-200">
         <input
           ref={fileInputRef}
@@ -162,7 +196,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           value={text} onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="输入消息，@ 选择 Agent"
-          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[#636366] dark:text-[var(--bg-secondary)] leading-relaxed py-1.5"
+          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[var(--text-tertiary)] dark:text-[var(--text-primary)] leading-relaxed py-1.5"
           rows={1} disabled={disabled}
         />
         {isThinking && (
@@ -204,10 +238,10 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
               )}>
                 {agent.roleType === "custom" && agent.avatarUrl
                   ? <img src={agent.avatarUrl} className="w-8 h-8 rounded-full object-cover" alt="" />
-                  : agent.adapterType === "deepseek" ? "🧠" : agent.adapterType === "anthropic" ? "✨" : "🔧"}
+                  : <AgentIcon adapterType={agent.adapterType} size={18} />}
               </div>
               <div>
-                <div className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">{agent.name}</div>
+                <div className="text-[14px] font-medium dark:text-[var(--text-primary)]">{agent.name}</div>
                 <div className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{agent.adapterType}</div>
               </div>
             </button>

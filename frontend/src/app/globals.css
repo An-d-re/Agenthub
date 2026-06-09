@@ -3,28 +3,29 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F5F5F7;
-  --bg-tertiary: #F9F9FB;
-  --text-primary: #1D1D1F;
-  --text-secondary: #86868B;
-  --text-tertiary: #C7C7CC;
-  --accent: #007AFF;
-  --accent-hover: #0066D6;
-  --success: #34C759;
-  --warning: #FF9F0A;
-  --danger: #FF3B30;
-  --border: #E5E5E7;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-md: 0 2px 6px rgba(0,0,0,0.06);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
+  /* ── Warm Ivory light mode ── */
+  --bg-primary: #FAF8F5;
+  --bg-secondary: #F2EEEA;
+  --bg-tertiary: #E8E4DF;
+  --text-primary: #1D1B18;
+  --text-secondary: #7B7670;
+  --text-tertiary: #B5B0A8;
+  --accent: #B8956A;
+  --accent-hover: #D4A574;
+  --success: #5B8C7A;
+  --warning: #C8923E;
+  --danger: #D14B3D;
+  --border: rgba(0,0,0,0.06);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.05);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.07);
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
   --sidebar-width: 240px;
   --right-panel-width: 340px;
-  /* shadcn/ui 兼容变量 — 映射到 Apple HIG 设计系统 */
+  /* shadcn/ui compatible */
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
   --card: var(--bg-secondary);
@@ -45,22 +46,22 @@
 }
 
 .dark {
-  --bg-primary: #1C1C1E;
-  --bg-secondary: #2C2C2E;
-  --bg-tertiary: #3A3A3C;
-  --text-primary: #F5F5F7;
-  --text-secondary: #AEAEB2;
-  --text-tertiary: #8E8E93;
-  --accent: #0A84FF;
-  --accent-hover: #409CFF;
-  --success: #30D158;
-  --warning: #FFD60A;
-  --danger: #FF453A;
-  --border: #38383A;
+  --bg-primary: #141210;
+  --bg-secondary: #1C1A18;
+  --bg-tertiary: #262420;
+  --text-primary: #EDEBE8;
+  --text-secondary: #9C9892;
+  --text-tertiary: #6B6762;
+  --accent: #B8956A;
+  --accent-hover: #D4A574;
+  --success: #5B8C7A;
+  --warning: #D4A574;
+  --danger: #E05548;
+  --border: rgba(255,255,255,0.06);
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 2px 6px rgba(0,0,0,0.4);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
-  /* shadcn/ui 暗色兼容变量 */
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  /* shadcn/ui dark compatible */
   --background: var(--bg-primary);
   --foreground: var(--text-primary);
   --card: var(--bg-secondary);
@@ -119,24 +120,21 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+/* Scrollbar — warm tinted */
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
-::-webkit-scrollbar-thumb { background: #D1D1D6; border-radius: 100px; }
-::-webkit-scrollbar-thumb:hover { background: #C7C7CC; }
-.dark ::-webkit-scrollbar-thumb { background: #48484A; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #545456; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 100px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
 /* Selection */
-::selection { background: rgba(0,122,255,0.2); color: var(--text-primary); }
+::selection { background: rgba(184,149,106,0.18); color: var(--text-primary); }
+::-moz-selection { background: rgba(184,149,106,0.18); color: var(--text-primary); }
 
 /* Code */
 pre {
   font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, monospace;
-  background: #1D1D1F;
-  color: #F5F5F7;
+  background: #1C1A18;
+  color: #EDEBE8;
   border-radius: var(--radius);
   padding: 16px;
   font-size: 13px;
@@ -144,8 +142,18 @@ pre {
   overflow-x: auto;
 }
 .dark pre {
-  background: #000000;
-  color: #E5E5E7;
+  background: #0E0D0C;
+  color: #EDEBE8;
+}
+
+/* Glass — warm tinted frosted */
+.glass {
+  background: rgba(250,248,245,0.78);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+}
+.dark .glass {
+  background: rgba(28,26,24,0.78);
 }
 
 /* Animations */
@@ -167,11 +175,11 @@ pre {
 }
 .animate-slide-up { animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
-@keyframes pulse-blue {
-  0%,100% { box-shadow: 0 0 0 0 rgba(0,122,255,0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(0,122,255,0); }
+@keyframes pulse-accent {
+  0%,100% { box-shadow: 0 0 0 0 rgba(184,149,106,0.35); }
+  50% { box-shadow: 0 0 0 8px rgba(184,149,106,0); }
 }
-.animate-pulse-blue { animation: pulse-blue 2s ease-in-out infinite; }
+.animate-pulse-blue { animation: pulse-accent 2s ease-in-out infinite; }
 
 @keyframes skeleton-pulse {
   0%,100% { opacity: 1; }
@@ -187,55 +195,6 @@ pre {
   content: "\258A";
   animation: blink 1s step-end infinite;
   color: var(--accent);
-}
-
-/* Cover breathing gradient */
-@keyframes cover-breathe {
-  0%,100% { background-position: 0% 50%; }
-  25% { background-position: 50% 0%; }
-  50% { background-position: 100% 50%; }
-  75% { background-position: 50% 100%; }
-}
-.animate-cover-breathe {
-  background-size: 200% 200%;
-  animation: cover-breathe 8s ease-in-out infinite;
-}
-
-/* Cover dissolve transition */
-.cover-container {
-  transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cover-glass-pane {
-  transition: backdrop-filter 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              -webkit-backdrop-filter 0.8s cubic-bezier(0.16, 1, 0.3, 1),
-              background 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cover-container.exiting {
-  opacity: 0;
-  pointer-events: none;
-}
-.cover-container.exiting .cover-glass-pane {
-  backdrop-filter: blur(0px) saturate(100%);
-  -webkit-backdrop-filter: blur(0px) saturate(100%);
-  background: transparent;
-}
-.cover-content {
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.cover-container.exiting .cover-content {
-  opacity: 0;
-  transform: scale(0.97);
-}
-
-/* Apple frosted glass */
-.glass {
-  background: rgba(255,255,255,0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-}
-.dark .glass {
-  background: rgba(28,28,30,0.72);
 }
 
 /* Hover lift */

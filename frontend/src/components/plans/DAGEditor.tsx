@@ -166,7 +166,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[14px] font-medium dark:text-[var(--bg-secondary)]">
+                    <span className="text-[14px] font-medium dark:text-[var(--text-primary)]">
                       {task.id}. {task.title}
                     </span>
                     <span className="text-[10px] font-medium text-[var(--accent)] bg-[var(--accent)]/10 px-1.5 py-0.5 rounded-full">

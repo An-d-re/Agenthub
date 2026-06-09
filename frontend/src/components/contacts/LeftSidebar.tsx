@@ -8,6 +8,7 @@ import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore } from "@/stores/chatStore";
 import { API_BASE } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { AgentIcon, AgentPlaceholderIcon } from "@/lib/agentIcons";
 import { AgentEditor } from "./AgentEditor";
 import { GroupEditor } from "./GroupEditor";
 
@@ -18,10 +19,6 @@ const AGENT_COLORS: Record<string, string> = {
   anthropic: "from-amber-400 to-orange-500",
   opencode: "from-blue-400 to-cyan-500",
   codex: "from-cyan-400 to-teal-500",
-};
-
-const AGENT_EMOJI: Record<string, string> = {
-  deepseek: "\u{1F9E0}", anthropic: "\u{2728}", opencode: "\u{1F527}", codex: "\u{1F4E6}",
 };
 
 export function LeftSidebar() {
@@ -84,10 +81,7 @@ export function LeftSidebar() {
 
   // Topics (= single sessions) for the selected agent
   const agentTopics = selectedContactId
-    ? singleSessions.filter(s => {
-        const ids = (s as unknown as Record<string,unknown>).agent_ids as string[] | undefined;
-        return ids ? ids.includes(selectedContactId) : false;
-      })
+    ? singleSessions.filter(s => s.agentIds?.includes(selectedContactId))
     : [];
 
   const selectedAgent = agents.find(a => a.id === selectedContactId);
@@ -98,6 +92,27 @@ export function LeftSidebar() {
 
   const handleNewGroup = () => { setGroupEditorOpen(true); };
 
+  const handleTogglePin = async (e: React.MouseEvent, s: typeof sessions[0]) => {
+    e.stopPropagation();
+    try {
+      const r = await fetch(`${API_BASE}/api/sessions/${s.id}/pin`, { method: "PUT" });
+      if (!r.ok) return;
+      const result = await r.json();
+      const store = useChatStore.getState();
+      const updated = store.sessions.map(session =>
+        session.id === s.id ? { ...session, pinnedAt: result.pinnedAt } : session
+      );
+      updated.sort((a, b) => {
+        if (a.pinnedAt && !b.pinnedAt) return -1;
+        if (!a.pinnedAt && b.pinnedAt) return 1;
+        return 0;
+      });
+      store.setSessions(updated);
+    } catch {
+      // 网络错误，静默失败
+    }
+  };
+
   const handleNewTopic = async () => {
     if (!selectedContactId) return;
     const topicNum = agentTopics.length + 1;
@@ -106,6 +121,24 @@ export function LeftSidebar() {
       body: JSON.stringify({title:`新对话 ${topicNum}`,type:"single",agent_ids:[selectedContactId]}),
     });
     if (r.ok) { const s = await r.json(); useChatStore.getState().setSessions([s, ...sessions]); setActiveSession(s.id); }
+  };
+
+  const handleOpenAgentChat = async (agentId: string) => {
+    setSelectedContact(agentId);
+    const existing = singleSessions.find(s => s.agentIds?.includes(agentId));
+    if (existing) {
+      setActiveSession(existing.id);
+      return;
+    }
+    const r = await fetch(`${API_BASE}/api/sessions`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({title:"新对话",type:"single",agent_ids:[agentId]}),
+    });
+    if (r.ok) {
+      const s = await r.json();
+      useChatStore.getState().setSessions([s, ...sessions]);
+      setActiveSession(s.id);
+    }
   };
 
   const handleDeleteSession = (e: React.MouseEvent, s: typeof sessions[0]) => {
@@ -217,7 +250,7 @@ export function LeftSidebar() {
               onClick={() => setTab(t.key)}
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors duration-200",
-                tab === t.key ? "text-[var(--text-primary)] dark:text-[var(--bg-secondary)]" : "text-[var(--text-secondary)] dark:text-[var(--text-secondary)] hover:text-[var(--text-primary)] dark:hover:text-[var(--bg-secondary)]"
+                tab === t.key ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               )}
             >
               {tabIcon(t.key)}
@@ -237,7 +270,7 @@ export function LeftSidebar() {
       <div className="p-3 shrink-0">
         <div className="flex items-center gap-2 bg-[var(--border)] dark:bg-[var(--bg-secondary)] rounded-[12px] px-3 py-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[var(--text-secondary)] dark:text-[var(--bg-secondary)] dark:placeholder:text-[#636366]" placeholder={`搜索${TABS.find(t => t.key === tab)?.label || ""}`} value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[var(--text-secondary)] dark:text-[var(--text-primary)] dark:placeholder:text-[var(--text-tertiary)]" placeholder={`搜索${TABS.find(t => t.key === tab)?.label || ""}`} value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -260,15 +293,15 @@ export function LeftSidebar() {
                   const isActive = selectedContactId === agent.id;
                   return (
                     <div key={agent.id}
-                      onClick={() => { setSelectedContact(agent.id); setTab("topics"); }}
+                      onClick={() => handleOpenAgentChat(agent.id)}
                       onContextMenu={e => handleContextMenu(e, agent.id)}
                       className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
-                      <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-lg shrink-0", AGENT_COLORS[agent.adapterType] || "from-gray-400 to-gray-500")}>
-                        {agent.roleType === "custom" ? (agent.avatarUrl ? <img src={agent.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={agent.name} /> : "👤") : (AGENT_EMOJI[agent.adapterType] || "\u{1F4A1}")}
+                      <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center shrink-0 text-white", AGENT_COLORS[agent.adapterType] || "from-gray-400 to-gray-500")}>
+                        {agent.roleType === "custom" ? (agent.avatarUrl ? <img src={agent.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={agent.name} /> : <AgentPlaceholderIcon size={18} />) : <AgentIcon adapterType={agent.adapterType} size={18} />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{agent.name}</div>
+                        <div className="text-[15px] font-medium truncate dark:text-[var(--text-primary)]">{agent.name}</div>
                         <div className="flex gap-1 mt-0.5">{(agent.capabilityTags||[]).slice(0,2).map(tag => <span key={tag} className="text-[11px] text-[var(--text-secondary)] bg-[var(--border)] dark:bg-[var(--bg-tertiary)] rounded-md px-1.5 py-0.5 leading-none">{tag}</span>)}</div>
                       </div>
                     </div>
@@ -298,9 +331,15 @@ export function LeftSidebar() {
                         <span className="text-sm font-bold text-[var(--text-secondary)]">#</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{s.title||"群聊"}</div>
+                        <div className="flex items-center gap-1">
+                          {s.pinnedAt && <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--accent)" strokeWidth="2" className="shrink-0"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/></svg>}
+                          <span className="text-[15px] font-medium truncate dark:text-[var(--text-primary)]">{s.title||"群聊"}</span>
+                        </div>
                         <div className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">{s.agentCount>0 ? `群聊 · ${s.agentCount}人` : "群聊"}</div>
                       </div>
+                      <button onClick={e=>handleTogglePin(e,s)} className={cn("shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-[var(--accent)]/10", s.pinnedAt ? "" : "opacity-0 group-hover:opacity-100")}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill={s.pinnedAt ? "var(--accent)" : "none"} stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/></svg>
+                      </button>
                       <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
@@ -326,7 +365,7 @@ export function LeftSidebar() {
                   {/* Current agent bar */}
                   <div className="flex items-center gap-2 mb-2 px-2 py-1">
                     <span className="text-[11px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">助手：</span>
-                    <span className="text-[12px] font-medium truncate dark:text-[var(--bg-secondary)]">{selectedAgent?.name || selectedContactId.slice(0,8)}</span>
+                    <span className="text-[12px] font-medium truncate dark:text-[var(--text-primary)]">{selectedAgent?.name || selectedContactId.slice(0,8)}</span>
                     <button onClick={() => setSelectedContact(null)} className="ml-auto text-[11px] text-[var(--text-tertiary)] hover:text-[var(--danger)] transition-colors">✕</button>
                   </div>
 
@@ -347,10 +386,16 @@ export function LeftSidebar() {
                             <span className="text-white text-[11px] font-semibold">@</span>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-[15px] font-medium truncate dark:text-[var(--bg-secondary)]">{s.title||"新对话"}</div>
+                            <div className="flex items-center gap-1">
+                              {s.pinnedAt && <svg width="10" height="10" viewBox="0 0 24 24" fill="var(--accent)" stroke="var(--accent)" strokeWidth="2" className="shrink-0"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/></svg>}
+                              <span className="text-[15px] font-medium truncate dark:text-[var(--text-primary)]">{s.title||"新对话"}</span>
+                            </div>
                             <div className="text-[12px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)]">单聊</div>
                           </div>
-                          <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
+                          <button onClick={e=>handleTogglePin(e,s)} className={cn("shrink-0 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 hover:bg-[var(--accent)]/10", s.pinnedAt ? "" : "opacity-0 group-hover:opacity-100")}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill={s.pinnedAt ? "var(--accent)" : "none"} stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3L9 10l-4 1 8 8 1-4 7-7-5-5z"/><line x1="4" y1="20" x2="10" y2="14"/></svg>
+                      </button>
+                      <button onClick={e=>handleDeleteSession(e,s)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-50/20 text-[var(--text-tertiary)] hover:text-[var(--danger)]">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                           </button>
                         </div>
@@ -390,13 +435,13 @@ export function LeftSidebar() {
       {sessionDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={() => setSessionDeleteConfirm(null)}>
           <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] mb-2">删除{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}</h3>
+            <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--text-primary)] mb-2">删除{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}</h3>
             <p className="text-[14px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-1">
               确定要删除「{sessionDeleteConfirm.title}」吗？此操作不可撤销，该{sessionDeleteConfirm.isGroup ? "群聊" : "对话"}中的所有消息将被永久删除。
             </p>
             {deleteError && <p className="text-[13px] text-[var(--danger)] mb-2">{deleteError}</p>}
             <div className="flex gap-2 mt-5">
-              <button onClick={() => setSessionDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] dark:border-[var(--border)] text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--bg-secondary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-tertiary)] transition-colors">取消</button>
+              <button onClick={() => setSessionDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] dark:border-[var(--border)] text-[14px] font-medium text-[var(--text-primary)] dark:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-tertiary)] transition-colors">取消</button>
               <button onClick={confirmDeleteSession} className="flex-1 py-2.5 rounded-xl bg-[var(--danger)] text-white text-[14px] font-medium hover:bg-[#E0352A] transition-colors">确认删除</button>
             </div>
           </div>
@@ -407,7 +452,7 @@ export function LeftSidebar() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 animate-fade-in" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-2xl shadow-lg p-6 w-[360px] animate-spring" onClick={e => e.stopPropagation()}>
-            <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] mb-2">删除助手</h3>
+            <h3 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--text-primary)] mb-2">删除助手</h3>
             <p className="text-[14px] text-[var(--text-secondary)] dark:text-[var(--text-secondary)] mb-1">
               删除该助手将<strong className="text-[var(--danger)]">同时删除其所有话题</strong>，是否继续？
             </p>

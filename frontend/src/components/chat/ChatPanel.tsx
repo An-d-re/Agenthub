@@ -5,6 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
 import { useAgentStore } from "@/stores/agentStore";
 import { API_BASE, EMPTY_ARRAY } from "@/lib/constants";
+import { AgentIcon } from "@/lib/agentIcons";
 import { MessageList } from "./MessageList";
 import { MessageInput } from "./MessageInput";
 import { AgentEditor } from "@/components/contacts/AgentEditor";
@@ -178,7 +179,7 @@ export function ChatPanel() {
               onBlur={handleRename} onKeyDown={e=>{if(e.key==="Enter")handleRename();if(e.key==="Escape")setEditingTitle(false);}}
               className="text-[17px] font-semibold bg-transparent border-0 outline-none border-b-2 border-[var(--accent)] w-full" />
           ) : (
-            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--bg-secondary)] tracking-tight cursor-pointer hover:text-[var(--accent)] transition-colors"
+            <h2 className="text-[17px] font-semibold text-[var(--text-primary)] dark:text-[var(--text-primary)] tracking-tight cursor-pointer hover:text-[var(--accent)] transition-colors"
               onClick={()=>{setTitle(activeSession?.title||"");setEditingTitle(true);}}>
               {activeSession?.title || "聊天"}
             </h2>
@@ -376,7 +377,7 @@ export function ChatPanel() {
                     filteredAgents.map(a => (
                       <button key={a.id} onClick={() => { handleAddMember(a.id); setSearchQuery(""); }}
                         className="w-full text-left px-3 py-2 text-[14px] hover:bg-[var(--bg-secondary)] transition-colors flex items-center gap-2 first:rounded-t-xl last:rounded-b-xl">
-                        <span className="text-base">{a.adapterType==="deepseek"?"🧠":a.adapterType==="anthropic"?"✨":"🔧"}</span>
+                        <span><AgentIcon adapterType={a.adapterType} size={18} /></span>
                         <div className="flex-1 min-w-0">
                           <span>{a.name}</span>
                           {(a.capabilityTags || []).length > 0 && (
