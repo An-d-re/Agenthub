@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from app.core.artifact_utils import extract_code_blocks, create_artifacts_from_blocks
 from app.core.database import async_session
 from app.core.event_bus import event_bus
 from app.models.agent import Agent
@@ -271,37 +272,5 @@ async def run_agent_modify(session_id: str, original_message_id: str, start_line
 
 def _extract_artifacts_from_content(content: str, message_id: str, session_id: str):
     """Extract code artifacts from agent reply for diff display."""
-    import re as _re
-    from app.models.artifact import Artifact
-
-    artifacts = []
-    blocks = _re.findall(r'```(\w+)?\s*\n(.*?)```', content, _re.DOTALL)
-    for lang, code in blocks:
-        file_path = _guess_file_path(code, lang)
-        art = Artifact(
-            task_id=None,
-            session_id=session_id,
-            file_path=file_path,
-            original_content=None,
-            modified_content=code.strip(),
-            language=lang or "text",
-            artifact_type="diff",
-        )
-        artifacts.append(art)
-    return artifacts
-
-
-def _guess_file_path(code: str, lang: str) -> str:
-    """Guess file path from code comment or language."""
-    ext_map = {
-        "python": "py", "py": "py",
-        "javascript": "js", "js": "js",
-        "typescript": "ts", "ts": "ts",
-        "tsx": "tsx", "jsx": "jsx",
-        "html": "html", "css": "css",
-        "json": "json", "sql": "sql",
-        "bash": "sh", "sh": "sh",
-        "yaml": "yml", "yml": "yml",
-    }
-    ext = ext_map.get(lang, lang)
-    return f"modified_code.{ext}"
+    blocks = extract_code_blocks(content)
+    return create_artifacts_from_blocks(blocks, session_id=session_id, artifact_type="diff")

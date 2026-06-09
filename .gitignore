@@ -55,3 +55,4 @@ venv/
 
 ./claude
 CLAUDE.md
+.gstack/

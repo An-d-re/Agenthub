@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/longx1a666/agenthub#readme",
   "dependencies": {
+    "@playwright/mcp": "^0.0.75",
     "playwright": "^1.60.0"
   }
 }

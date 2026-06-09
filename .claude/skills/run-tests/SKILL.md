@@ -16,7 +16,34 @@
 - `/run-tests flask-todo 计算任务` → 按 `id` 或文件名匹配，执行指定用例
 - 创建批次目录 `tests/test-output/YYYY-MM-DD_HH-MM/`
 
-### 阶段 1：启动服务
+### 阶段 1：前置检查 + 启动服务
+
+#### 1.1 MCP 可用性检查（必须最先执行，不通过不往下走）
+
+**⚠️ 所有浏览器操作必须通过 Playwright MCP 工具执行，禁止退化为 Python 脚本。** MCP 工具提供交互式 DOM 检测能力（`browser_snapshot` + `browser_click`），脚本方式无法适应动态渲染，容易因选择器/时机问题卡死。
+
+**检查流程（C 方案：静态检查 → 试调用）**：
+
+1. **静态检查**：
+   - 检查 `.mcp.json` 是否存在且包含 `playwright` 服务配置
+   - 运行 `npx @playwright/mcp@latest --version` 确认包可用
+   - 任一步失败 → 跳到诊断
+
+2. **试调用验证**：
+   - 调用 Playwright MCP `browser_navigate` 导航到 `about:blank`
+   - 成功 → MCP 可用，进入 1.2 启动服务
+   - 失败 → 进入诊断
+
+3. **诊断与修复（B 方案）**：
+   - 尝试调用 `/mcp` 命令重连 Playwright MCP
+   - 重连成功后回到步骤 2（试调用验证）
+   - 重连失败或 `/mcp` 不可用：
+     - 检查 `.mcp.json` 是否存在、格式是否正确
+     - 检查 `npx @playwright/mcp@latest` 是否可执行
+     - 输出具体错误和建议修复方案（如 `npm install -g @playwright/mcp@latest`）
+   - **修复不了就报错退出，不执行任何用例**
+
+#### 1.2 启动服务
 
 1. `taskkill //F //IM python.exe 2>/dev/null; taskkill //F //IM node.exe 2>/dev/null` 清理旧进程
 2. 启动后端：`cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000`（后台运行）
@@ -50,13 +77,13 @@
 | 行模式 | 类型 | 操作 |
 |--------|------|------|
 | `用户：消息内容` | 发送消息 | 在输入框输入消息，点击发送。**第一条 `用户：` 消息触发测试正式开始。** |
-| `(等待 PlanCard 出现后点击第一个方案)` | 等待+点击 | 轮询 DOM 中出现 `.plan-card` 或匹配的元素，点击第一个方案按钮 |
-| `(等待 DAG 确认后点击确认)` | 等待+点击 | 等待 DAG 面板渲染，点击确认/执行按钮 |
-| `(等待所有任务完成后截图)` | 等待+截图 | 轮询 task 状态直到全部 done/failed，然后截图 |
+| `(等待 PlanCard 出现后点击第一个方案)` | 等待+点击 | **执行前先读 `frontend/src/components/cards/PlanCard.tsx` 确认当前按钮文本。** 后端 `comparison.py` 逻辑：单推荐方案自动跳过 PlanCard 直进 DAG，多方案才发 `plan.comparison`。**用 DOM 按钮检测（`button:has-text('选择方案')` / `button:has-text('确认执行')`），不要依赖 Zustand store**——store 通过 WS 事件填充，浏览器重开时历史事件不重放，store 为空但 DOM 已渲染 |
+| `(等待 DAG 确认后点击确认)` | 等待+点击 | DAGEditor 确认按钮文本为 `确认执行`，读 `frontend/src/components/plans/DAGEditor.tsx` 确认。用 `button:has-text('确认执行')` 检测 |
+| `(等待所有任务完成后截图)` | 等待+截图 | 轮询 task 状态直到全部 done/failed，然后截图。**不能只看 store 中已出现的 task 数量（task 逐个出现易误判 1/1=完成）**，必须先用 `GET /api/sessions/{id}` 获取期望任务总数，store 中任务数=期望数 且 全部 done/failed 才算完成 |
 | `(Critic自行判断是否需要继续细问需求)` | 观察等待 | 等待 60 秒内是否有 Critic 消息，在摘要中标记"Critic 已发言/未发言" |
-| `(Planner提供计划方案)` | 观察等待 | 等待 WS 收到 `plan.comparison` 或 Planner 消息，超时 120 秒 |
-| `(用户确认)` | 执行动作 | `plan.comparison` 出现后点击第一个方案 |
-| `(任务结束)` | 等待结束 | 轮询直到所有 task 状态为 done/failed/cancelled，超时用用例的 `timeout` |
+| `(Planner提供计划方案)` | 观察等待 | 等待 DOM 出现 `button:has-text('选择方案')` 或 `button:has-text('确认执行')`，超时 120 秒。优先 DOM 检测，Zustand store 仅作辅助 |
+| `(用户确认)` | 执行动作 | **用 DOM 自动判断当前状态**：`button:has-text('选择方案')` 可见→点击第一个→等 DAG；`button:has-text('确认执行')` 可见→直接点击确认 |
+| `(任务结束)` | 等待结束 | **先查 API 获知应有几个 task，再轮询**。Zustand store 里 task 是逐个出现的（依赖链导致分批执行，`pending` 状态不发 `task.update`），只有 store 里 task 数=API 返回的期望数 且 全部 done/failed/cancelled 才算结束。超时用用例的 `timeout` |
 | `Agent名：对话内容` | 纯记录 | **不做任何匹配**，由人工审阅。`xxxxx` 为用户标注的任意值占位 |
 | 其他 `(描述)` | 自定义动作 | 按照自然语言描述执行 |
 
@@ -179,9 +206,10 @@ execution summary 追加在 conversation.md 末尾：
 
 ## 注意事项
 
-- 使用 Playwright MCP 操作浏览器，优先用 `browser_click`、`browser_type`、`browser_snapshot` 等方法
+- **强制使用 Playwright MCP**：所有浏览器操作必须通过 MCP 工具（`browser_navigate`、`browser_click`、`browser_type`、`browser_snapshot`、`browser_take_screenshot` 等）执行。**严禁编写 Python Playwright 脚本**——脚本无法实时查看 DOM、无法根据实际渲染状态自适应调整，容易因选择器失效或时机问题卡死整个测试
+- **如果 MCP 中途断连**：立即暂停测试，尝试 `/mcp` 重连。重连成功后继续，失败则报告并退出
 - REST API 调用使用 `curl`（已在 settings.local.json 白名单中）
-- 前端通过 Zustand store 切换 session（`window.__CHAT_STORE__.getState().setCurrentSessionId(id)`）
+- 前端通过 Zustand store 切换 session（`window.__CHAT_STORE__.getState().setActiveSession(id)`）
 - 如果后端或前端启动失败（端口就绪超时 60 秒），报告错误并退出，不执行任何用例
 - 一个用例失败不影响后续用例执行
 - 清理阶段即使失败也继续（可能 Agent 已被删除等情况）

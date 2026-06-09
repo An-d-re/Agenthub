@@ -58,6 +58,14 @@ class BasePhaseHandler:
         "编程": "coder", "写代码": "coder", "评论": "critic",
     }
 
+    # 角色 → 预期能力标签（用于无 task_context 时的 Agent 匹配）
+    ROLE_CAPABILITY_KEYWORDS = {
+        "critic": ["需求分析", "问题澄清", "技术评估"],
+        "planner": ["方案设计", "任务分解", "架构规划"],
+        "coder": ["编程", "代码", "开发"],
+        "reviewer": ["审查", "验证", "校对", "审核"],
+    }
+
     async def execute(self, ctx: PhaseContext) -> Optional[str]:
         """执行阶段逻辑。返回下一阶段名称，或 None 保持当前阶段。"""
         raise NotImplementedError
@@ -183,6 +191,20 @@ class BasePhaseHandler:
                         if ag:
                             return ag, ad
 
+        # ── 2.5. 角色-能力回退（无 task_context 时按能力标签匹配角色）──
+        role_caps = self.ROLE_CAPABILITY_KEYWORDS.get(role, [])
+        if role_caps:
+            role_caps_lower = set(c.lower() for c in role_caps)
+            for aid in agent_ids:
+                if aid in exclude:
+                    continue
+                agent = agent_map.get(aid)
+                if not agent:
+                    continue
+                agent_caps = set(tag.lower() for tag in (agent.capability_tags or []))
+                if agent_caps & role_caps_lower:
+                    return await self._get_agent_adapter(db, aid)
+
         # ── 3. 索引回退 ──────────────────────────────────
         # 过滤掉已排除的 ID，按原始顺序排列
         available = [aid for aid in agent_ids if aid not in exclude]
@@ -190,7 +212,8 @@ class BasePhaseHandler:
             return None, None
 
         index_map = {
-            "critic": 0, "planner": 0,
+            "critic": 0,
+            "planner": min(1, len(available) - 1),
             "coder": min(1, len(available) - 1),
             "reviewer": min(2, len(available) - 1),
         }

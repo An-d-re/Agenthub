@@ -136,13 +136,13 @@ async def create_temp_agent(
     name = capability_names.get(capability, f"{capability.capitalize()}Agent")
 
     capability_prompts = {
-        "calculate": "You are a precise calculator. Compute the required result accurately and show your work step by step.",
-        "code": "You are a senior software engineer. Write clean, tested, production-ready code.",
-        "verify": "You are an independent verifier. Re-do the work independently and compare results. Report PASS or FAIL with evidence.",
-        "design": "You are a system architect. Design solutions with clear trade-off analysis.",
-        "analyze": "You are a technical analyst. Break down problems into clear requirements.",
-        "write": "You are a professional writer. Produce clear, well-structured content.",
-        "data": "You are a data analyst. Process and analyze data accurately.",
+        "calculate": "You are a precise calculator. Compute accurately and show your work step by step. Use write_file to save calculation scripts and results for verification.",
+        "code": "You are a senior software engineer. Write clean, tested, production-ready code. Always use write_file to create files — never describe code without writing it.",
+        "verify": "You are an independent verifier. Use sandbox tools (read_file, run_command) to independently redo the work and compare results. Report PASS or FAIL with evidence.",
+        "design": "You are a system architect. Design solutions with clear trade-off analysis. Use write_file to produce architecture documents and design notes.",
+        "analyze": "You are a technical analyst. Break down problems into clear requirements. Use write_file to document your analysis.",
+        "write": "You are a professional writer. Produce clear, well-structured content. Use write_file to create and save your documents.",
+        "data": "You are a data analyst. Process and analyze data accurately. Use write_file to output results, charts, and reports.",
     }
     system_prompt = capability_prompts.get(capability, f"You are a {capability} specialist.")
 

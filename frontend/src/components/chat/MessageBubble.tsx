@@ -9,6 +9,7 @@ import { API_BASE } from "@/lib/constants";
 import { useAgentStore } from "@/stores/agentStore";
 import { useChatStore, type ChatMessage } from "@/stores/chatStore";
 import { CodeBlock } from "./CodeBlock";
+import { FileCard } from "@/components/cards/FileCard";
 
 // ── 深度思考折叠块 ──
 
@@ -241,12 +242,15 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
               )}
             </div>
           ) : isFile && message.fileUrl ? (
-            <a
-              href={`${API_BASE}${message.fileUrl}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm transition-all max-w-[320px]"
-            >
+            message.fileLanguage ? (
+              <FileCard message={message} />
+            ) : (
+              <a
+                href={`${API_BASE}${message.fileUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[var(--accent)]/30 hover:shadow-sm transition-all max-w-[320px]"
+              >
               <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/10 flex items-center justify-center shrink-0">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
@@ -265,6 +269,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
                 )}
               </div>
             </a>
+            )
           ) : isModify && message.codeSelection ? (
             <div>
               <span className="text-[11px] text-[#FF9500] font-semibold">✏️ 修改请求 · 第{message.codeSelection.start_line}-{message.codeSelection.end_line}行</span>

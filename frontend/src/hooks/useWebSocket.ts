@@ -54,6 +54,7 @@ export function useWebSocket(sessionId: string | null) {
           fileName: m.file_name,
           fileUrl: m.file_url,
           fileSize: m.file_size,
+          fileLanguage: m.file_language,
           createdAt: m.created_at || new Date().toISOString(),
         });
       }
@@ -126,6 +127,7 @@ export function useWebSocket(sessionId: string | null) {
             fileName: p.file_name,
             fileUrl: p.file_url,
             fileSize: p.file_size,
+            fileLanguage: p.file_language,
             reasoning: p.reasoning,
             reasoningId: p.reasoning_id,
             createdAt,

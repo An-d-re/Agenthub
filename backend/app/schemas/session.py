@@ -21,6 +21,26 @@ class AgentBindingResponse(BaseModel):
     adapter_type: str = ""
 
 
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    title: str = ""
+    status: str = "pending"
+    assigned_agent_id: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PlanResponse(BaseModel):
+    phase: str = "clarify"
+    status: str = "active"
+    selected_approach: Optional[str] = None
+    tasks: list[TaskStatusResponse] = []
+
+    model_config = {"from_attributes": True}
+
+
 class SessionResponse(BaseModel):
     id: str
     title: str
@@ -30,6 +50,7 @@ class SessionResponse(BaseModel):
     last_active_at: Optional[datetime] = None
     created_at: datetime
     agents: list[AgentBindingResponse] = []
+    plan: Optional[PlanResponse] = None
 
     model_config = {"from_attributes": True}
 

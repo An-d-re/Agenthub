@@ -265,6 +265,13 @@ class AnthropicAdapter(BaseAdapter):
                     if block.type == "text":
                         final_content += block.text
 
+        # fallback：ReAct 循环未产出 artifact，从文本响应提取代码块
+        if not all_artifacts and final_content and final_content.strip():
+            from app.core.artifact_utils import extract_code_blocks
+            blocks = extract_code_blocks(final_content)
+            for block in blocks:
+                all_artifacts.append(block)
+
         return AgentResponse(
             content=final_content,
             artifacts=all_artifacts,

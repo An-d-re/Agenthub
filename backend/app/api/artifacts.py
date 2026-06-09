@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,23 @@ async def get_artifact(artifact_id: str, db: AsyncSession = Depends(get_db)):
         "artifact_type": artifact.artifact_type,
         "created_at": artifact.created_at.isoformat(),
     }
+
+
+@router.get("/{artifact_id}/download")
+async def download_artifact(artifact_id: str, db: AsyncSession = Depends(get_db)):
+    artifact = await db.get(Artifact, artifact_id)
+    if not artifact:
+        raise HTTPException(404, "Artifact not found")
+    content = artifact.modified_content or ""
+    file_name = artifact.file_path.split("/")[-1] or "artifact.txt"
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{file_name}"',
+            "Content-Length": str(len(content.encode("utf-8"))),
+        },
+    )
 
 
 @router.get("")

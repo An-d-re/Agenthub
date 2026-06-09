@@ -193,9 +193,38 @@ def run_case(case_file: str, idx: int, total: int):
                     action = sdata
                     try:
                         if "Critic" in action:
-                            log("    Waiting for Critic (30s)...")
-                            page.wait_for_timeout(30000)
-                            result["steps"].append({"num": step_num, "type": "observe-critic", "status": "OK"})
+                            log("    Observing Critic (polling for plan, max 60s)...")
+                            critic_deadline = time.time() + 60
+                            plan_appeared = False
+                            while time.time() < critic_deadline:
+                                page.wait_for_timeout(3000)
+                                # Check if plan/DAG elements appeared (Critic finished, phase advanced)
+                                for sel in [".plan-card", "[class*='PlanCard']", "[class*='dag']",
+                                            "[class*='DAG']", "[class*='task-pipeline']"]:
+                                    try:
+                                        if page.locator(sel).first.is_visible(timeout=1000):
+                                            plan_appeared = True
+                                            break
+                                    except:
+                                        continue
+                                if plan_appeared:
+                                    log("    Plan/DAG appeared, Critic phase ended")
+                                    break
+                                # Also check API — if plan phase advanced past clarify
+                                try:
+                                    detail = requests.get(f"{API}/sessions/{session_id}").json()
+                                    phase = (detail.get("plan") or {}).get("phase", "")
+                                    if phase and phase != "clarify":
+                                        log(f"    Plan phase is '{phase}', Critic phase ended")
+                                        plan_appeared = True
+                                        break
+                                except:
+                                    pass
+                            if not plan_appeared:
+                                log("    Critic observation timeout (60s), continuing")
+                            page.screenshot(path=str(out / f"screenshots/step{step_num:02d}-critic.png"))
+                            result["steps"].append({"num": step_num, "type": "observe-critic",
+                                                    "status": "OK", "detail": "plan appeared" if plan_appeared else "timeout"})
 
                         elif "Planner" in action and ("计划" in action or "方案" in action):
                             log("    Waiting for plan comparison (120s)...")
@@ -213,21 +242,33 @@ def run_case(case_file: str, idx: int, total: int):
                         elif "确认" in action:
                             log("    Confirming plan...")
                             page.wait_for_timeout(2000)
-                            # Click first plan option
-                            for sel in ["button:has-text('选择')", "button:has-text('Recommended')",
-                                         ".plan-card button", "[class*='PlanCard'] button"]:
+                            # Detect scenario: multi-plan (PlanCards visible) or single-plan (DAG editor only)
+                            has_plan_cards = False
+                            for sel in [".plan-card", "[class*='PlanCard']"]:
                                 try:
-                                    btn = page.locator(sel).first
-                                    if btn.is_visible(timeout=2000):
-                                        btn.click()
-                                        page.wait_for_timeout(2000)
-                                        log(f"    Clicked: {sel}")
+                                    if page.locator(sel).first.is_visible(timeout=1500):
+                                        has_plan_cards = True
                                         break
                                 except:
                                     continue
+                            if has_plan_cards:
+                                log("    Multi-plan: clicking first plan option...")
+                                for sel in ["button:has-text('选择')", "button:has-text('Recommended')",
+                                             ".plan-card button", "[class*='PlanCard'] button"]:
+                                    try:
+                                        btn = page.locator(sel).first
+                                        if btn.is_visible(timeout=2000):
+                                            btn.click()
+                                            page.wait_for_timeout(2000)
+                                            log(f"    Clicked plan: {sel}")
+                                            break
+                                    except:
+                                        continue
+                            else:
+                                log("    Single-plan: no PlanCards, going directly to confirm")
                             # Click confirm/execute
-                            for sel in ["button:has-text('确认')", "button:has-text('执行')",
-                                         "button:has-text('开始执行')"]:
+                            for sel in ["button:has-text('确认执行')", "button:has-text('开始执行')",
+                                         "button:has-text('确认')", "button:has-text('执行')"]:
                                 try:
                                     btn = page.locator(sel).first
                                     if btn.is_visible(timeout=5000):
@@ -241,31 +282,31 @@ def run_case(case_file: str, idx: int, total: int):
                             result["steps"].append({"num": step_num, "type": "confirm", "status": "OK"})
 
                         elif "任务结束" in action:
-                            log(f"    Waiting for tasks to finish (timeout={timeout}s)...")
+                            log(f"    Waiting for tasks to complete (timeout={timeout}s)...")
                             deadline = time.time() + timeout
                             while time.time() < deadline:
                                 page.wait_for_timeout(10000)
                                 elapsed = time.time() - start_time
-                                log(f"      Still waiting... {int(elapsed)}s elapsed")
-                                page.screenshot(path=str(out / f"screenshots/step{step_num:02d}-progress.png"))
-                                # Check for completion via API
                                 try:
-                                    msgs = requests.get(f"{API}/sessions/{session_id}/messages").json()
-                                    done_count = sum(1 for m in msgs if isinstance(m, dict) and
-                                                     m.get("message_type") == "task.update" and
-                                                     m.get("content", {}).get("status") in ("done", "failed", "cancelled"))
-                                    if done_count > 0:
-                                        log(f"      Found {done_count} completed task messages")
-                                except:
-                                    pass
-                                # Check DOM
-                                try:
-                                    running = page.locator("[class*='running'], text='执行中'").count()
-                                    if running == 0:
-                                        log("      No running tasks in DOM, breaking")
+                                    detail = requests.get(f"{API}/sessions/{session_id}").json()
+                                    plan = detail.get("plan") or {}
+                                    tasks = plan.get("tasks", [])
+                                    phase = plan.get("phase", "")
+                                    done = sum(1 for t in tasks if t.get("status") in ("done", "failed", "cancelled"))
+                                    total = len(tasks)
+                                    if total > 0 and done >= total:
+                                        log(f"      All {total} tasks completed ({done} done/failed/cancelled)")
                                         break
-                                except:
-                                    pass
+                                    elif phase == "done":
+                                        log(f"      Plan phase is 'done'")
+                                        break
+                                    elif done > 0:
+                                        log(f"      {done}/{total} tasks done, phase={phase}")
+                                    else:
+                                        log(f"      Waiting... {int(elapsed)}s elapsed (phase={phase}, tasks={total})")
+                                except Exception as e:
+                                    log(f"      API check error: {e}")
+                                page.screenshot(path=str(out / f"screenshots/step{step_num:02d}-progress.png"))
                             page.screenshot(path=str(out / "screenshots/final.png"))
                             result["steps"].append({"num": step_num, "type": "wait-tasks", "status": "OK"})
 

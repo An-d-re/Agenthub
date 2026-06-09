@@ -57,7 +57,8 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
             role: m.role as "user" | "agent" | "system", content: m.content as string,
             messageType: m.message_type as string, parentId: m.parent_id as string,
             fileName: m.file_name as string, fileUrl: m.file_url as string,
-            fileSize: m.file_size as number, createdAt: m.created_at as string,
+            fileSize: m.file_size as number, fileLanguage: m.file_language as string,
+            createdAt: m.created_at as string,
           })));
         }
       }).catch(() => setMsgError(true)).finally(() => setMsgLoading(false));

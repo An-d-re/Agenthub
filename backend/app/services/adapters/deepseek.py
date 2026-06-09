@@ -179,8 +179,10 @@ class DeepSeekAdapter(BaseAdapter):
 
         # ── ReAct 工具调用循环 ──────────────────────────────
         for iteration in range(self.MAX_TOOL_ITERATIONS):
-            # 首轮强制使用工具，后续自动选择
-            tc_mode = "required" if iteration == 0 else "auto"
+            # 首轮：code/data 强制工具调用，其余 auto（允许先分析再写文件）
+            _capability = task.get("capability", "code")
+            _is_code_like = _capability in ("code", "data")
+            tc_mode = "required" if (iteration == 0 and _is_code_like) else "auto"
             resp = await self._call_with_retry(messages, tools, tool_choice=tc_mode)
             if resp is None:
                 return AgentResponse(content="[错误：任务执行失败]")
@@ -269,6 +271,13 @@ class DeepSeekAdapter(BaseAdapter):
             resp = await self._call_with_retry(messages, None)
             if resp:
                 final_content = resp.choices[0].message.content or ""
+
+        # fallback：ReAct 循环未产出 artifact，从文本响应提取代码块
+        if not all_artifacts and final_content and final_content.strip():
+            from app.core.artifact_utils import extract_code_blocks
+            blocks = extract_code_blocks(final_content)
+            for block in blocks:
+                all_artifacts.append(block)
 
         return AgentResponse(
             content=final_content,

@@ -14,8 +14,10 @@ from app.core.database import get_db
 from app.models.agent import Agent
 from app.models.message import Message, PinnedMessage
 from app.models.session import Session, SessionAgent
+from app.models.plan import Plan
+from app.models.task import Task
 from app.schemas.message import MessageResponse, PinToggle
-from app.schemas.session import SessionCreate, SessionListItem, SessionResponse
+from app.schemas.session import SessionCreate, SessionListItem, SessionResponse, PlanResponse, TaskStatusResponse
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -409,7 +411,7 @@ def _role_label(msg: Message, agent_map: dict[str, "Agent"]) -> str:
 
 
 async def _build_session_response(session_id: str, db: AsyncSession) -> SessionResponse:
-    """Fetch session with agents loaded."""
+    """Fetch session with agents and active plan loaded."""
     result = await db.execute(
         select(Session).options(selectinload(Session.agents)).where(Session.id == session_id)
     )
@@ -437,6 +439,33 @@ async def _build_session_response(session_id: str, db: AsyncSession) -> SessionR
                 "adapter_type": agent.adapter_type,
             })
 
+    # 查询活跃 Plan 及其任务
+    plan_data = None
+    plan_result = await db.execute(
+        select(Plan).options(selectinload(Plan.tasks)).where(
+            Plan.session_id == session_id, Plan.status == "active"
+        )
+    )
+    plan = plan_result.scalar_one_or_none()
+    if plan:
+        tasks_data = [
+            TaskStatusResponse(
+                task_id=t.id,
+                title=t.title,
+                status=t.status,
+                assigned_agent_id=t.assigned_agent_id,
+                started_at=t.started_at,
+                completed_at=t.completed_at,
+            )
+            for t in plan.tasks
+        ]
+        plan_data = PlanResponse(
+            phase=plan.phase,
+            status=plan.status,
+            selected_approach=plan.selected_approach,
+            tasks=tasks_data,
+        )
+
     return SessionResponse(
         id=session.id,
         title=session.title,
@@ -446,4 +475,5 @@ async def _build_session_response(session_id: str, db: AsyncSession) -> SessionR
         last_active_at=session.last_active_at,
         created_at=session.created_at,
         agents=agent_bindings,
+        plan=plan_data,
     )

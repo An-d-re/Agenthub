@@ -22,10 +22,20 @@ type DeviceKey = (typeof DEVICE_PRESETS)[number]["key"];
 
 interface Props {
   artifact: ArtifactItem;
+  open?: boolean;
+  onClose?: () => void;
 }
 
-export function PreviewCard({ artifact }: Props) {
-  const [open, setOpen] = useState(false);
+export function PreviewCard({ artifact, open: externalOpen, onClose }: Props) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (externalOpen !== undefined) {
+      if (!v) onClose?.();
+    } else {
+      setInternalOpen(v);
+    }
+  };
   const [device, setDevice] = useState<DeviceKey>("desktop");
   const [html, setHtml] = useState<string | null>(null);
   const [deployUrl, setDeployUrl] = useState<string | null>(null);
@@ -111,16 +121,18 @@ export function PreviewCard({ artifact }: Props) {
 
   return (
     <>
-      <div className="flex justify-center w-full my-2 animate-fade-in">
-        <div
-          onClick={handleOpen}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/5 hover:border-[var(--success)]/60 cursor-pointer transition-colors"
-        >
-          <span className="text-sm">🌐</span>
-          <span className="text-xs font-mono truncate max-w-[160px]">{fileName}</span>
-          <span className="text-[10px] text-[var(--success)] font-medium">预览</span>
+      {externalOpen === undefined && (
+        <div className="flex justify-center w-full my-2 animate-fade-in">
+          <div
+            onClick={handleOpen}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-[var(--success)]/30 bg-[var(--success)]/5 hover:border-[var(--success)]/60 cursor-pointer transition-colors"
+          >
+            <span className="text-sm">🌐</span>
+            <span className="text-xs font-mono truncate max-w-[160px]">{fileName}</span>
+            <span className="text-[10px] text-[var(--success)] font-medium">预览</span>
+          </div>
         </div>
-      </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-5xl h-[85vh] flex flex-col">

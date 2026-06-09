@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
@@ -10,6 +11,7 @@ from app.core.phases.base import BasePhaseHandler, PhaseContext, _utcnow
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.message import Message
+from app.models.artifact import Artifact
 from app.core.tracer import tracer
 from app.services.adapters.base import AgentContext, AgentRole
 
@@ -254,7 +256,7 @@ class ExecutingHandler(BasePhaseHandler):
         agent_role = self._capability_to_agent_role(capability)
 
         # 需要沙箱工具的能力类型（ReAct + 工具调用循环）
-        SANDBOX_CAPABILITIES = {"code", "data"}
+        SANDBOX_CAPABILITIES = {"calculate", "code", "data", "design", "analyze", "write", "verify"}
 
         context = AgentContext(
             session_id=session_id,
@@ -293,6 +295,7 @@ class ExecutingHandler(BasePhaseHandler):
                     ) as span:
                         response = await adapter.execute_task(context, {
                             "id": task.id, "title": task.title, "description": task.description,
+                            "capability": capability,
                         })
                         span["tags"]["tokens_used"] = response.metadata.get("tokens_used", 0)
                 else:
@@ -310,6 +313,60 @@ class ExecutingHandler(BasePhaseHandler):
             task.status = "done"
             task.completed_at = _utcnow()
             await db.flush()
+
+            # 持久化沙箱任务产生的代码产物
+            created_artifacts = []
+            for art_data in (response.artifacts or []):
+                artifact = Artifact(
+                    task_id=task.id,
+                    session_id=session_id,
+                    file_path=art_data.get("file_path", ""),
+                    original_content="",
+                    modified_content=art_data.get("content", ""),
+                    language=art_data.get("language", "text"),
+                    artifact_type="code",
+                )
+                db.add(artifact)
+                await db.flush()
+                created_artifacts.append(artifact)
+                pending.append({
+                    "type": "artifact.created",
+                    "session_id": session_id,
+                    "payload": {
+                        "artifact_id": artifact.id,
+                        "task_id": task.id,
+                        "file_path": artifact.file_path,
+                        "language": artifact.language,
+                        "original_content": "",
+                        "content_preview": (artifact.modified_content or "")[:500],
+                    },
+                })
+
+            # fallback：未通过 write_file 产出 artifact，从文本响应提取代码块
+            if not created_artifacts and response.content and response.content.strip():
+                from app.core.artifact_utils import extract_code_blocks, create_artifacts_from_blocks
+                blocks = extract_code_blocks(response.content)
+                if blocks:
+                    fallback_artifacts = create_artifacts_from_blocks(
+                        blocks, session_id, task_id=task.id, artifact_type="code",
+                    )
+                    for artifact in fallback_artifacts:
+                        db.add(artifact)
+                        await db.flush()
+                        created_artifacts.append(artifact)
+                        pending.append({
+                            "type": "artifact.created",
+                            "session_id": session_id,
+                            "payload": {
+                                "artifact_id": artifact.id,
+                                "task_id": task.id,
+                                "file_path": artifact.file_path,
+                                "language": artifact.language,
+                                "original_content": "",
+                                "content_preview": (artifact.modified_content or "")[:500],
+                            },
+                        })
+
             logger.info(
                 "[%s] 任务完成: %s agent=%s result_len=%d",
                 session_id[:8], task.title[:40], agent.name, len(task.result or ""),
@@ -322,6 +379,29 @@ class ExecutingHandler(BasePhaseHandler):
                 db, session_id, response.content,
                 agent_id=agent.id, agent_role=capability, pending_events=pending,
             )
+
+            # 为每个产物发送文件卡片消息
+            for artifact in created_artifacts:
+                file_name = artifact.file_path.split("/")[-1] or artifact.file_path
+                file_size = len((artifact.modified_content or "").encode("utf-8"))
+                pending.append({
+                    "type": "chat.message",
+                    "session_id": session_id,
+                    "payload": {
+                        "id": str(uuid.uuid4()),
+                        "session_id": session_id,
+                        "role": "agent",
+                        "agent_id": agent.id,
+                        "agent_role": capability,
+                        "content": "",
+                        "message_type": "file",
+                        "file_name": file_name,
+                        "file_url": f"/api/artifacts/{artifact.id}/download",
+                        "file_size": file_size,
+                        "file_language": artifact.language,
+                        "created_at": _utcnow().isoformat(),
+                    },
+                })
 
         except Exception as e:
             logger.error(

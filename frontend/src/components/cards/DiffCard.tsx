@@ -19,10 +19,20 @@ const MonacoDiff = dynamic(
 
 interface DiffCardProps {
   artifact: ArtifactItem;
+  open?: boolean;
+  onClose?: () => void;
 }
 
-export function DiffCard({ artifact }: DiffCardProps) {
-  const [open, setOpen] = useState(false);
+export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (externalOpen !== undefined) {
+      if (!v) onClose?.();
+    } else {
+      setInternalOpen(v);
+    }
+  };
   const [code, setCode] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -70,33 +80,35 @@ export function DiffCard({ artifact }: DiffCardProps) {
 
   return (
     <>
-      <div className="flex flex-col items-center w-full my-2 animate-fade-in">
-        <div
-          onClick={handleOpen}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card dark:bg-[var(--bg-secondary)] hover:border-accent/40 cursor-pointer transition-colors max-w-md"
-        >
-          <span className="text-sm">📄</span>
-          <span className="text-xs font-mono truncate flex-1">{fileName}</span>
-          <Badge variant="secondary" className="text-[10px] h-4 px-1">
-            {langLabel}
-          </Badge>
-          <span className="text-[10px] text-muted-foreground">查看 Diff</span>
-          {applied ? (
-            <span className="text-[10px] text-[var(--success)] font-medium">✓ 已应用</span>
-          ) : (
-            <button
-              onClick={handleApply}
-              disabled={applying}
-              className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
-            >
-              {applying ? "应用中..." : "应用"}
-            </button>
+      {externalOpen === undefined && (
+        <div className="flex flex-col items-center w-full my-2 animate-fade-in">
+          <div
+            onClick={handleOpen}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-card dark:bg-[var(--bg-secondary)] hover:border-accent/40 cursor-pointer transition-colors max-w-md"
+          >
+            <span className="text-sm">📄</span>
+            <span className="text-xs font-mono truncate flex-1">{fileName}</span>
+            <Badge variant="secondary" className="text-[10px] h-4 px-1">
+              {langLabel}
+            </Badge>
+            <span className="text-[10px] text-muted-foreground">查看 Diff</span>
+            {applied ? (
+              <span className="text-[10px] text-[var(--success)] font-medium">✓ 已应用</span>
+            ) : (
+              <button
+                onClick={handleApply}
+                disabled={applying}
+                className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)] disabled:opacity-50 transition-colors"
+              >
+                {applying ? "应用中..." : "应用"}
+              </button>
+            )}
+          </div>
+          {applyError && (
+            <div className="text-[11px] text-[var(--danger)] mt-1">{applyError}</div>
           )}
         </div>
-        {applyError && (
-          <div className="text-[11px] text-[var(--danger)] mt-1">{applyError}</div>
-        )}
-      </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-4xl h-[80vh]">

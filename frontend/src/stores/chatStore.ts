@@ -15,6 +15,7 @@ export interface ChatMessage {
   fileName?: string;
   fileUrl?: string;
   fileSize?: number;
+  fileLanguage?: string;
   createdAt: string;
 }
 
