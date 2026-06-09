@@ -56,3 +56,33 @@ venv/
 
 # GStack
 .gstack/
+
+# ── 非工程文件（停止追踪）──────────────────────
+# Markdown 文档
+*.md
+
+# Claude Code 配置
+.claude/
+
+# Agent Skills 安装产物
+.agents/
+skills-lock.json
+
+# AI 协作记录
+ai-collaboration/
+
+# 文档目录
+docs/
+
+# 需求文档
+req.md
+前端要求.md
+功能要求.md
+issues.md
+overview.md
+collaboration-guide.md
+TESTING.md
+CONTEXT.md
+
+# 测试用例
+tests/cases/
