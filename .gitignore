@@ -30,14 +30,17 @@ logs/
 .DS_Store
 Thumbs.db
 
-# ── Claude Code 个人设置（不提交）────────────
-.claude/settings.local.json
-.claude/worktrees/
-.claude/tasks/
+# ── Claude Code（不提交）────────────────────
+.claude/
 
-# ── 临时 & 调试文件 ─────────────────────────
+# ── 测试 & 调试（不提交）────────────────────
+test-cases/
+tests/
 backend/test_session_id.txt
 *.tmp
+
+# ── AI 协作记录（不提交）────────────────────
+ai-collaboration/
 
 # ── Python ─────────────────────────────────
 venv/
