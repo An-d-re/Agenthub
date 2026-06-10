@@ -52,3 +52,4 @@ venv/
 # ── Playwright (测试) ───────────────────────
 .playwright-mcp/
 demo/
+docs/
