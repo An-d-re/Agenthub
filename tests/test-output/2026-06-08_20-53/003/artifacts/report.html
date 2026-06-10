@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q1销售额增长率和环比分析报告</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+            padding: 40px 35px;
+            transition: all 0.3s ease;
+        }
+
+        /* 头部 */
+        .header {
+            text-align: center;
+            margin-bottom: 35px;
+            padding-bottom: 25px;
+            border-bottom: 2px solid #f0f2f5;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a2e;
+            letter-spacing: 1px;
+        }
+
+        .header .subtitle {
+            font-size: 15px;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+
+        .header .subtitle span {
+            display: inline-block;
+            background: #eef2ff;
+            color: #4f46e5;
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-weight: 500;
+            margin: 0 4px;
+        }
+
+        /* 摘要卡片 */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 35px;
+        }
+
+        .card {
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 20px 18px;
+            text-align: center;
+            border: 1px solid #e9edf4;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
+        }
+
+        .card .month {
+            font-size: 14px;
+            color: #6b7280;
+            font-weight: 500;
+            margin-bottom: 6px;
+        }
+
+        .card .sales {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .card .sales small {
+            font-size: 14px;
+            font-weight: 400;
+            color: #94a3b8;
+        }
+
+        .card .growth {
+            font-size: 13px;
+            margin-top: 8px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .growth.up {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .growth.down {
+            background: #fee2e2;
+            color: #dc2626;
+        }
+
+        .growth.neutral {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        /* 图表容器 */
+        .chart-wrapper {
+            position: relative;
+            margin-bottom: 35px;
+            padding: 20px 10px 10px 10px;
+            background: #fafbfc;
+            border-radius: 14px;
+            border: 1px solid #e9edf4;
+        }
+
+        .chart-wrapper canvas {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 400px;
+        }
+
+        /* 表格 */
+        .table-section h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .table-section h2::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background: #4f46e5;
+            border-radius: 4px;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid #e9edf4;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 15px;
+        }
+
+        thead {
+            background: #f1f5f9;
+        }
+
+        thead th {
+            padding: 14px 18px;
+            text-align: left;
+            font-weight: 600;
+            color: #334155;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        tbody td {
+            padding: 14px 18px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #1e293b;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .badge.green {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .badge.amber {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        /* 底部 */
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #f0f2f5;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .footer .summary {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .footer .summary strong {
+            color: #1e293b;
+        }
+
+        .footer .verified {
+            font-size: 13px;
+            color: #16a34a;
+            background: #f0fdf4;
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid #bbf7d0;
+            white-space: nowrap;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 16px;
+            }
+
+            .header h1 {
+                font-size: 22px;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .card .sales {
+                font-size: 24px;
+            }
+
+            .chart-wrapper {
+                padding: 10px 5px;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            thead th,
+            tbody td {
+                padding: 10px 12px;
+            }
+
+            .footer {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 16px 10px;
+            }
+
+            .container {
+                padding: 16px 12px;
+                border-radius: 14px;
+            }
+
+            .header h1 {
+                font-size: 18px;
+            }
+
+            .card .sales {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <h1>📊 Q1 销售额增长率和环比分析</h1>
+            <div class="subtitle">
+                数据来源：公司财务系统 · 单位：<span>万元</span>
+            </div>
+        </div>
+
+        <!-- 摘要卡片 -->
+        <div class="summary-cards" id="summaryCards">
+            <!-- 由 JS 动态渲染 -->
+        </div>
+
+        <!-- 图表 -->
+        <div class="chart-wrapper">
+            <canvas id="salesChart"></canvas>
+        </div>
+
+        <!-- 数据表格 -->
+        <div class="table-section">
+            <h2>月度销售数据明细</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>月份</th>
+                            <th>销售额（万元）</th>
+                            <th>环比增长率</th>
+                            <th>增长趋势</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody">
+                        <!-- 由 JS 动态渲染 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div class="footer">
+            <div class="summary" id="summaryText">
+                <!-- 由 JS 动态渲染 -->
+            </div>
+            <div class="verified">✅ 数据已验算确认</div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // 1. 数据定义（与 growth_data.json 一致）
+        // ============================================================
+        const DATA = {
+            title: "Q1销售额增长率和环比分析",
+            original_data: {
+                "一月": 120,
+                "二月": 185,
+                "三月": 203
+            },
+            unit: "万元",
+            growth_rates: {
+                "二月环比一月": { rate_percent: 54.17 },
+                "三月环比二月": { rate_percent: 9.73 }
+            },
+            analysis_summary: "Q1销售额逐月增长，1→2月增长显著（54.17%），2→3月增速放缓（9.73%），整体呈上升趋势。",
+            verification: {
+                method: "比例因子法重新验算",
+                verified: true
+            }
+        };
+
+        const months = Object.keys(DATA.original_data);
+        const salesValues = Object.values(DATA.original_data);
+        const growthRates = Object.values(DATA.growth_rates).map(item => item.rate_percent);
+
+        // 第一个月无增长率，补 0 用于图表展示
+        const chartGrowthRates = [0, ...growthRates];
+
+        // ============================================================
+        // 2. 渲染摘要卡片
+        // ============================================================
+        function renderCards() {
+            const container = document.getElementById('summaryCards');
+            let html = '';
+
+            months.forEach((month, index) => {
+                const sales = salesValues[index];
+                let growthText = '—';
+                let growthClass = 'neutral';
+
+                if (index === 0) {
+                    growthText = '基准月';
+                    growthClass = 'neutral';
+                } else {
+                    const rate = growthRates[index - 1];
+                    growthText = `环比 +${rate.toFixed(2)}%`;
+                    growthClass = 'up';
+                }
+
+                html += `
+                    <div class="card">
+                        <div class="month">${month}</div>
+                        <div class="sales">${sales} <small>万元</small></div>
+                        <div class="growth ${growthClass}">${growthText}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // ============================================================
+        // 3. 渲染表格
+        // ============================================================
+        function renderTable() {
+            const tbody = document.getElementById('dataTableBody');
+            let html = '';
+
+            months.forEach((month, index) => {
+                const sales = salesValues[index];
+                let growthText = '—';
+                let badgeHtml = '<span class="badge neutral">基准月</span>';
+
+                if (index > 0) {
+                    const rate = growthRates[index - 1];
+                    growthText = `+${rate.toFixed(2)}%`;
+                    badgeHtml = `<span class="badge green">📈 增长 ${rate.toFixed(2)}%</span>`;
+                }
+
+                html += `
+                    <tr>
+                        <td><strong>${month}</strong></td>
+                        <td>${sales}</td>
+                        <td>${growthText}</td>
+                        <td>${badgeHtml}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // ============================================================
+        // 4. 渲染底部摘要
+        // ============================================================
+        function renderFooter() {
+            document.getElementById('summaryText').innerHTML =
+                `<strong>分析摘要：</strong>${DATA.analysis_summary}`;
+        }
+
+        // ============================================================
+        // 5. 绘制 Chart.js 双轴图表
+        // ============================================================
+        function renderChart() {
+            const ctx = document.getElementById('salesChart').getContext('2d');
+
+            // 渐变色
+            const salesGradient = ctx.createLinearGradient(0, 0, 0, 300);
+            salesGradient.addColorStop(0, 'rgba(79, 70, 229, 0.25)');
+            salesGradient.addColorStop(1, 'rgba(79, 70, 229, 0.01)');
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: '销售额（万元）',
+                            data: salesValues,
+                            type: 'bar',
+                            yAxisID: 'y',
+                            backgroundColor: [
+                                'rgba(79, 70, 229, 0.75)',
+                                'rgba(79, 70, 229, 0.75)',
+                                'rgba(79, 70, 229, 0.75)'
+                            ],
+                            borderColor: '#4f46e5',
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            barPercentage: 0.55,
+                            order: 2
+                        },
+                        {
+                            label: '环比增长率（%）',
+                            data: chartGrowthRates,
+                            type: 'line',
+                            yAxisID: 'y1',
+                            borderColor: '#16a34a',
+                            backgroundColor: '#16a34a',
+                            pointBackgroundColor: '#16a34a',
+                            pointBorderColor: '#fff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 9,
+                            borderWidth: 3,
+                            tension: 0.35,
+                            fill: false,
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 14, weight: '600' },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    let val = context.parsed.y;
+                                    if (context.dataset.yAxisID === 'y') {
+                                        return label + ': ' + val.toFixed(0) + ' 万元';
+                                    } else {
+                                        if (context.dataIndex === 0) return label + ': 基准月';
+                                        return label + ': +' + val.toFixed(2) + '%';
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                font: {
+                                    size: 13,
+                                    weight: '500'
+                                }
+                            }
+                        },
+                        y: {
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '销售额（万元）',
+                                font: { size: 13, weight: '500' },
+                                color: '#4f46e5'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.05)'
+                            },
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '万';
+                                }
+                            }
+                        },
+                        y1: {
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '环比增长率（%）',
+                                font: { size: 13, weight: '500' },
+                                color: '#16a34a'
+                            },
+                            grid: {
+                                display: false
+                            },
+                            beginAtZero: true,
+                            max: 70,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============================================================
+        // 6. 初始化
+        // ============================================================
+        document.addEventListener('DOMContentLoaded', function() {
+            renderCards();
+            renderTable();
+            renderFooter();
+            renderChart();
+        });
+    </script>
+</body>
+</html>

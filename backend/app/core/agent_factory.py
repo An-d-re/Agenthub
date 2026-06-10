@@ -1,11 +1,10 @@
-"""Agent Factory —— 临时 Agent 的创建、匹配、销毁。
+"""Agent Factory —— 全局 Agent 的创建与匹配。
 
-两层匹配：
+匹配规则：
 1. 语义匹配：Agent 名称/角色是否与任务所需能力语义一致
 2. 能力标签匹配：Agent capability_tags 是否覆盖任务所需技能
 
-两层都不通过 → 标记为需新建临时 Agent
-Plan done → 销毁该 Plan 期间创建的所有临时 Agent
+任一层通过 → 复用已有 Agent；都不通过 → 创建新 Agent（全局永久）。
 """
 
 import logging
@@ -74,37 +73,82 @@ async def match_task_to_agent(
     session_id: str,
     capability: str,
     assigned_agent_ids: set[str],
+    task_title: str = "",
+    task_description: str = "",
+    mentions: Optional[list[str]] = None,
 ) -> MatchResult:
-    """为任务匹配现有 Agent。
+    """为任务匹配 Agent（全局搜索 + 自动绑定到当前会话）。
 
-    两层匹配：
-    1. 语义匹配 —— Agent 身份看起来能做这个任务吗？
-    2. 能力标签匹配 —— Agent 标签里有对应技能吗？
+    搜索所有 Agent，四层匹配（按优先级）：
+    1. @mention 显式指定（用户 @ 了某 Agent 名）
+    2. 能力标签直接匹配（capability_tags 含 capability 名）
+    3. 语义匹配（Agent 名称/角色与能力语义一致）
+    4. 技术标签反向匹配（从任务描述提取技术名，匹配 Agent 的 capability_tags）
 
-    两层都不通过 → 返回 MatchResult(matched=False)
-    任一层通过 → 返回匹配到的 Agent
+    匹配成功后自动绑定到当前会话（如未绑定）。
     """
-    result = await db.execute(
-        select(SessionAgent).where(SessionAgent.session_id == session_id)
+    # 全局搜索所有 Agent（不限于当前会话）
+    agents_result = await db.execute(
+        select(Agent).where(Agent.id.notin_(assigned_agent_ids or set()))
     )
-    session_agents = result.scalars().all()
-    agent_ids = [sa.agent_id for sa in session_agents if sa.agent_id not in assigned_agent_ids]
-
-    if not agent_ids:
-        return MatchResult(matched=False, reason="群聊中没有可用的 Agent")
-
-    # 批量加载 Agent，避免 N+1
-    agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
     agents = list(agents_result.scalars().all())
+
+    if not agents:
+        return MatchResult(matched=False, reason="系统中没有可用的 Agent")
+
+    # ── 0. @mention 显式指定（最高优先级）────────────────
+    if mentions:
+        for m in mentions:
+            m_lower = m.strip().lower()
+            for agent in agents:
+                if agent.name.lower() == m_lower:
+                    await _ensure_session_agent(db, session_id, agent.id)
+                    return MatchResult(
+                        matched=True, agent=agent,
+                        reason=f"用户 @ 指定了 {agent.name}",
+                    )
+        # 模糊匹配：@名称的一部分命中 Agent 名
+        for m in mentions:
+            m_lower = m.strip().lower()
+            for agent in agents:
+                if m_lower in agent.name.lower():
+                    await _ensure_session_agent(db, session_id, agent.id)
+                    return MatchResult(
+                        matched=True, agent=agent,
+                        reason=f"用户 @ 指定（模糊匹配 {agent.name}）",
+                    )
+
+    # 从任务描述中提取技术标签，用于反向匹配 Agent 的 capability_tags
+    tech_label = ""
+    if task_title or task_description:
+        tech_label = _extract_tech_label(task_title, task_description)
+
+    # 先把语义/标签匹配不到但技术标签命中的 Agent 收集起来（次优匹配）
+    tech_matched_agent: Optional[Agent] = None
 
     for agent in agents:
         sem_ok = _semantic_match(agent, capability)
         tag_ok = _capability_tag_match(agent, capability)
 
         if sem_ok and tag_ok:
+            await _ensure_session_agent(db, session_id, agent.id)
             return MatchResult(matched=True, agent=agent, reason="语义 + 能力标签均匹配")
         if sem_ok:
+            await _ensure_session_agent(db, session_id, agent.id)
             return MatchResult(matched=True, agent=agent, reason="语义匹配（能力标签未覆盖但角色一致）")
+
+        # 技术标签反向匹配：任务描述中的技术词命中了 Agent 的能力标签
+        if tech_label and not tech_matched_agent:
+            agent_tags_lower = {t.lower() for t in (agent.capability_tags or [])}
+            if tech_label.lower() in agent_tags_lower:
+                tech_matched_agent = agent
+
+    if tech_matched_agent:
+        await _ensure_session_agent(db, session_id, tech_matched_agent.id)
+        return MatchResult(
+            matched=True, agent=tech_matched_agent,
+            reason=f"技术标签匹配（任务涉及 {tech_label}，Agent 标签包含 {tech_label}）",
+        )
 
     return MatchResult(
         matched=False,
@@ -112,10 +156,56 @@ async def match_task_to_agent(
     )
 
 
-# ── 临时 Agent 创建 ──────────────────────────────────────────
+# ── 会话绑定 ──────────────────────────────────────────────
 
 
-async def create_temp_agent(
+async def _ensure_session_agent(db: AsyncSession, session_id: str, agent_id: str) -> None:
+    """确保 Agent 已绑定到当前会话，未绑定时自动添加。"""
+    existing = await db.execute(
+        select(SessionAgent).where(
+            SessionAgent.session_id == session_id,
+            SessionAgent.agent_id == agent_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        return
+    db.add(SessionAgent(session_id=session_id, agent_id=agent_id))
+    logger.info("Agent %s 已绑定到会话 %s", agent_id[:8], session_id[:8])
+
+
+# ── Agent 创建 ──────────────────────────────────────────────
+
+
+# ── 技术标签提取 ──
+
+TECH_PATTERNS = [
+    # 越具体越靠前，避免被泛关键字抢先匹配
+    ("TypeScript", ["typescript"]),
+    ("Node.js", ["node.js", "nodejs"]),
+    ("JavaScript", ["javascript"]),
+    ("React", ["react"]),
+    ("Vue", ["vue"]),
+    ("Python", ["python"]),
+    ("HTML", ["html", "网页"]),
+    ("CSS", ["css", "样式"]),
+    ("SQL", ["sql", "数据库"]),
+    ("Rust", ["rust"]),
+    ("Go", ["golang", "go语言"]),
+    ("Java", ["java"]),
+    ("Shell", ["shell", "bash", "命令行"]),
+]
+
+
+def _extract_tech_label(title: str, description: str) -> str:
+    """从任务标题和描述中提取最匹配的技术标签。"""
+    text = f"{title} {description}".lower()
+    for label, keywords in TECH_PATTERNS:
+        if any(kw in text for kw in keywords):
+            return label
+    return ""
+
+
+async def create_agent(
     db: AsyncSession,
     session_id: str,
     task: Task,
@@ -123,25 +213,38 @@ async def create_temp_agent(
     adapter_type: str,
     api_key: Optional[str] = None,
 ) -> Agent:
-    """为任务创建临时 Agent，按 capability 自动命名。"""
+    """为任务创建全局 Agent（永久存在，会话间可复用）。"""
     capability_names = {
         "calculate": "计算Agent",
         "code": "编码Agent",
         "verify": "验证Agent",
         "design": "设计Agent",
         "analyze": "分析Agent",
-        "write": "写作Agent",
         "data": "数据Agent",
     }
-    name = capability_names.get(capability, f"{capability.capitalize()}Agent")
+    base_name = capability_names.get(capability, f"{capability.capitalize()}Agent")
+
+    # 编码任务：从标题/描述提取技术标签，拼到名字和 prompt 里
+    tech_label = ""
+    if capability == "code":
+        tech_label = _extract_tech_label(task.title, task.description or "")
+    name = f"{base_name}·{tech_label}" if tech_label else base_name
 
     capability_prompts = {
         "calculate": "You are a precise calculator. Compute accurately and show your work step by step. Use write_file to save calculation scripts and results for verification.",
-        "code": "You are a senior software engineer. Write clean, tested, production-ready code. Always use write_file to create files — never describe code without writing it.",
+        "code": (
+            f"You are a senior software engineer specializing in {tech_label}. "
+            f"Write clean, production-ready {tech_label} code. "
+            f"Also handle content writing and documentation. "
+            f"Always use write_file to create files — never describe code without writing it."
+        ) if tech_label else (
+            "You are a senior software engineer. Write clean, tested, production-ready code. "
+            "Also handle content writing and documentation. "
+            "Always use write_file to create files — never describe code without writing it."
+        ),
         "verify": "You are an independent verifier. Use sandbox tools (read_file, run_command) to independently redo the work and compare results. Report PASS or FAIL with evidence.",
         "design": "You are a system architect. Design solutions with clear trade-off analysis. Use write_file to produce architecture documents and design notes.",
         "analyze": "You are a technical analyst. Break down problems into clear requirements. Use write_file to document your analysis.",
-        "write": "You are a professional writer. Produce clear, well-structured content. Use write_file to create and save your documents.",
         "data": "You are a data analyst. Process and analyze data accurately. Use write_file to output results, charts, and reports.",
     }
     system_prompt = capability_prompts.get(capability, f"You are a {capability} specialist.")
@@ -158,7 +261,6 @@ async def create_temp_agent(
         system_prompt=system_prompt,
         capability_tags=[capability],
         is_deletable=True,
-        is_temp=True,
         encrypted_api_key=encrypted_key,
     )
     db.add(agent)
@@ -170,44 +272,10 @@ async def create_temp_agent(
     await db.flush()
 
     logger.info(
-        "Created temp agent %s (capability=%s, adapter=%s) for session %s task %s",
+        "Created agent %s (capability=%s, adapter=%s) for session %s task %s",
         agent.id, capability, adapter_type, session_id, task.id,
     )
     return agent
-
-
-# ── 临时 Agent 销毁 ──────────────────────────────────────────
-
-
-async def destroy_temp_agents(db: AsyncSession, session_id: str) -> int:
-    """销毁会话中所有临时 Agent（is_deletable=True 且非手动创建）。
-
-    返回销毁数量。
-    """
-    result = await db.execute(
-        select(SessionAgent).where(SessionAgent.session_id == session_id)
-    )
-    session_agents = result.scalars().all()
-    agent_ids = [sa.agent_id for sa in session_agents]
-
-    # 批量加载 Agent，避免 N+1
-    agent_map: dict[str, Agent] = {}
-    if agent_ids:
-        agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
-        agent_map = {a.id: a for a in agents_result.scalars().all()}
-
-    destroyed = 0
-    for sa in session_agents:
-        agent = agent_map.get(sa.agent_id)
-        if agent and agent.is_temp:
-            await db.delete(sa)
-            await db.delete(agent)
-            destroyed += 1
-            logger.info("Destroyed temp agent %s (%s)", agent.id, agent.name)
-
-    if destroyed:
-        logger.info("Destroyed %d temp agents in session %s", destroyed, session_id)
-    return destroyed
 
 
 # ── API Key 加解密 ────────────────────────────────────────────

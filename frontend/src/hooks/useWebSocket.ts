@@ -223,6 +223,11 @@ export function useWebSocket(sessionId: string | null) {
         return;
       }
       useChatStore.getState().setConnectionStatus("disconnected");
+      // 清除已有重连定时器，防止多次 onclose 创建重复定时器
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (reconnectCountRef.current < MAX_RECONNECT_ATTEMPTS) {
         const delay = RECONNECT_DELAYS[reconnectCountRef.current] * 1000;
         reconnectCountRef.current++;
@@ -232,7 +237,8 @@ export function useWebSocket(sessionId: string | null) {
     };
 
     ws.onerror = () => {
-      ws.close();
+      // 不主动 close，浏览器在连接真正断开时会自动触发 onclose
+      // 瞬时网络波动也可能触发 onerror，此时连接仍存活，强行 close 会制造断连重连循环
     };
   }, [sessionId, fetchMissedMessages]);
 

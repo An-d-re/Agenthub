@@ -205,6 +205,47 @@ async def remove_agent_from_session(session_id: str, agent_id: str, db: AsyncSes
     return {"ok": True}
 
 
+@router.get("/{session_id}/plan")
+async def get_session_plan(session_id: str, db: AsyncSession = Depends(get_db)):
+    """返回会话的完整任务计划（DAG + 运行时状态），供前端刷新/切换会话时恢复协作剧场。"""
+    plan_result = await db.execute(
+        select(Plan).where(Plan.session_id == session_id)
+        .order_by(Plan.created_at.desc()).limit(1)
+    )
+    plan = plan_result.scalar_one_or_none()
+
+    if not plan or not plan.task_dag:
+        return {"phase": plan.phase if plan else "no_plan", "tasks": [], "hint": ""}
+
+    # 加载 DB Task 运行时状态
+    task_result = await db.execute(select(Task).where(Task.plan_id == plan.id))
+    db_tasks = {t.id: t for t in task_result.scalars().all()}
+
+    dag_tasks = []
+    for td in (plan.task_dag or []):
+        if not isinstance(td, dict):
+            continue
+        db_id = td.get("_db_id", "")
+        db_task = db_tasks.get(db_id)
+        dag_tasks.append({
+            "id": td.get("id"),
+            "db_id": db_id,
+            "title": td.get("title", ""),
+            "description": td.get("description", "")[:200],
+            "dependencies": td.get("dependencies", []),
+            "required_capability": td.get("required_capability", "code"),
+            "assigned_agent_id": td.get("assigned_agent_id"),
+            "status": db_task.status if db_task else "pending",
+            "agent_name": None,  # 前端会用 agentStore 匹配
+        })
+
+    return {
+        "phase": plan.phase,
+        "tasks": dag_tasks,
+        "hint": plan.selected_approach or "",
+    }
+
+
 @router.get("/{session_id}/diagnostics")
 async def get_diagnostics(session_id: str, db: AsyncSession = Depends(get_db)):
     """返回会话的完整诊断信息：Plan 阶段、DAG、Task 状态、Agent 清单。"""
@@ -332,8 +373,7 @@ async def export_session(session_id: str, db: AsyncSession = Depends(get_db)):
     ]
     for aid, agent in agent_map.items():
         tags = ", ".join(agent.capability_tags or [])
-        temp_mark = " 🔧临时" if agent.is_deletable else ""
-        lines.append(f"- **{agent.name}** (id=`{aid}`) role=`{agent.role_type}` adapter=`{agent.adapter_type}` tags=`{tags}`{temp_mark}")
+        lines.append(f"- **{agent.name}** (id=`{aid}`) role=`{agent.role_type}` adapter=`{agent.adapter_type}` tags=`{tags}`")
     lines.append("")
     lines.append("---")
     lines.append("")

@@ -132,7 +132,7 @@ export function SettingsPanel({ open, onClose }: Props) {
         style={{ animation: "slideInRight 0.28s cubic-bezier(0.16, 1, 0.3, 1)" }}
       >
         {/* Header */}
-        <div className="flex items-center px-6 h-[48px] border-b border-[var(--border)]/50 shrink-0">
+        <div className="flex items-center px-6 h-[48px] border-b border-[var(--border)] shrink-0">
           <button
             onClick={onClose}
             className="w-8 h-8 -ml-2 rounded-full flex items-center justify-center hover:bg-[var(--bg-secondary)] transition-colors text-[var(--text-secondary)]"

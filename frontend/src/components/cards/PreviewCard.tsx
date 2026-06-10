@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,18 @@ export function PreviewCard({ artifact, open: externalOpen, onClose }: Props) {
   const [deploying, setDeploying] = useState(false);
 
   const activeSessionId = useChatStore(s => s.activeSessionId);
+
+  // 外部 open 控制时，弹窗打开后自动拉取内容
+  useEffect(() => {
+    if (open && !html && artifact.artifactId) {
+      fetch(`${API_BASE}/api/artifacts/${artifact.artifactId}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) setHtml(data.modified_content || data.content_preview || "");
+        })
+        .catch(() => console.warn("获取预览内容失败"));
+    }
+  }, [open, html, artifact.artifactId]);
 
   const handleOpen = async () => {
     if (!html && artifact.artifactId) {

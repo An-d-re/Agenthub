@@ -46,6 +46,7 @@ async def websocket_endpoint(
 
     async def ws_to_eventbus():
         """Read from WebSocket, persist messages, publish to event bus."""
+        ws_ref = websocket  # 捕获引用，防止重连时 finally 误杀新连接
         try:
             while True:
                 raw = await websocket.receive_text()
@@ -69,7 +70,7 @@ async def websocket_endpoint(
         except Exception as e:
             logging.getLogger(__name__).exception("ws_to_eventbus 异常: %s", e)
         finally:
-            await manager.disconnect(client_id)
+            await manager.disconnect(client_id, expected_ws=ws_ref)
             # 无客户端连接此 session 时清理 EventBus 队列
             remaining = manager.has_session_clients(session_id)
             if not remaining:

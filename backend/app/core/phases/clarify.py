@@ -66,10 +66,6 @@ class ClarifyHandler(BasePhaseHandler):
 
         clarify_round = ctx.plan.clarify_round or 0
 
-        # ── 首次进入 clarify 时生成初步任务草稿，推送到前端 ──
-        if clarify_round == 0:
-            await self._publish_draft_plan(ctx)
-
         # 轮次 1+：必须等用户说 ok/确认 才推进
         if clarify_round > 0:
             lower = ctx.user_message.strip().lower()
@@ -160,9 +156,9 @@ class ClarifyHandler(BasePhaseHandler):
         return None
 
     def _critic_has_confirmed(self, content: str) -> bool:
-        """Critic 在回复中放了 [READY] 标记，表示需求已明确。
-        但如果仍在向用户提问，即使有 [READY] 也不推进。"""
-        if "[READY]" not in content:
+        """Critic 在回复中放了 <!--READY--> 标记，表示需求已明确。
+        但如果仍在向用户提问，即使有 <!--READY--> 也不推进。"""
+        if "<!--READY-->" not in content:
             return False
         if self._is_still_asking(content):
             return False

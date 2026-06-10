@@ -143,7 +143,7 @@ export function DAGEditor({ tasks, onConfirm, onDelete }: Props) {
                 "rounded-2xl border p-4 transition-all duration-200 bg-[var(--bg-primary)] dark:bg-[var(--bg-secondary)]",
                 isChecked
                   ? "border-[var(--border)] hover:border-accent/30"
-                  : "border-[var(--border)]/50 opacity-50"
+                  : "border-[var(--border)] opacity-50"
               )}
             >
               {/* 任务标题行 */}

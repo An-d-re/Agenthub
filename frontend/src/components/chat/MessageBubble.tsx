@@ -289,11 +289,7 @@ export function MessageBubble({ message, index = 0, onModify, onRegenerate }: Pr
             ? "bg-[var(--accent)] text-white rounded-br-[4px]"
             : isModify
               ? "bg-[#FFF3E0] dark:bg-[#3D2910] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px] border border-[#FFCC80] dark:border-[#664400]"
-              : message.agentRole && ROLE_CONFIG[message.agentRole]
-                ? `${ROLE_CONFIG[message.agentRole].bubble} dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]`
-                : isImage || isFile
-                ? "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]"
-                : "bg-[var(--bg-secondary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]"
+              : "bg-[var(--bg-tertiary)] dark:bg-[var(--bg-secondary)] text-[var(--text-primary)] dark:text-[var(--text-primary)] rounded-bl-[4px]"
         )}>
           {/* 被引用消息预览 */}
           {quotedMessage && !isImage && !isFile && (

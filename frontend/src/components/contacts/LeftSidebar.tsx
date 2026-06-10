@@ -14,14 +14,27 @@ import { GroupEditor } from "./GroupEditor";
 
 type TabKey = "agents" | "groups" | "topics" | "archived";
 
-const AGENT_COLORS: Record<string, string> = {
-  deepseek: "from-purple-500 to-indigo-500",
-  anthropic: "from-amber-400 to-orange-500",
-  opencode: "from-blue-400 to-cyan-500",
-  codex: "from-cyan-400 to-teal-500",
+const CAPABILITY_COLORS: Record<string, string> = {
+  code: "from-blue-400 to-cyan-500",
+  design: "from-amber-400 to-orange-500",
+  verify: "from-emerald-400 to-green-500",
+  analyze: "from-purple-500 to-indigo-500",
+  plan: "from-violet-400 to-purple-500",
+  write: "from-teal-400 to-cyan-500",
 };
 
-export function LeftSidebar() {
+function getAgentColor(agent: { capabilityTags?: string[]; roleType?: string; adapterType?: string }) {
+  const tags = agent.capabilityTags || [];
+  for (const tag of tags) {
+    const key = tag.toLowerCase();
+    if (CAPABILITY_COLORS[key]) return CAPABILITY_COLORS[key];
+  }
+  // fallback: role type
+  if (agent.roleType === "system") return "from-violet-400 to-purple-500";
+  return "from-gray-400 to-gray-500";
+}
+
+export function LeftSidebar({ onOpenSettings }: { onOpenSettings?: () => void }) {
   const agents = useAgentStore(s => s.agents);
   const setAgents = useAgentStore(s => s.setAgents);
   const sessions = useChatStore(s => s.sessions);
@@ -246,11 +259,11 @@ export function LeftSidebar() {
     { key: "agents", label: "助手" },
     { key: "groups", label: "群聊" },
     { key: "topics", label: "话题" },
-    { key: "archived", label: "已归档" },
+    { key: "archived", label: "归档" },
   ];
 
   const tabIcon = (key: TabKey) => {
-    const cls = "w-4 h-4";
+    const cls = "w-3.5 h-3.5";
     switch (key) {
       case "agents": return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="17" cy="11" r="4"/><path d="M23 21v-2a4 4 0 0 0-4-4h-2"/></svg>;
       case "groups": return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><circle cx="19" cy="7" r="4"/><path d="M15 21v-2a4 4 0 0 1 4-4h2"/></svg>;
@@ -262,17 +275,17 @@ export function LeftSidebar() {
   const searchFilter = (text: string) => !search || text.toLowerCase().includes(search.toLowerCase());
 
   return (
-    <div className="flex flex-col h-full bg-[var(--bg-secondary)]">
+    <div className="flex flex-col h-full bg-[var(--bg-secondary)] overflow-hidden">
       {/* Tab bar — frosted glass */}
-      <div className="shrink-0 bg-[var(--bg-secondary)]/80 backdrop-blur-xl border-b border-[var(--border)]/50">
-        <div className="flex relative h-[48px]">
+      <div className="shrink-0 bg-[var(--bg-secondary)]/80 backdrop-blur-xl border-b border-[var(--border)]">
+        <div className="flex relative h-[56px] px-2">
           {TABS.map(t => (
             <button
               key={t.key}
               ref={tabButtonRefs[t.key]}
               onClick={() => setTab(t.key)}
               className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-medium transition-colors duration-200",
+                "flex-1 flex items-center justify-center gap-1 text-[12px] font-medium transition-colors duration-200",
                 tab === t.key ? "text-[var(--text-primary)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               )}
             >
@@ -290,7 +303,7 @@ export function LeftSidebar() {
       </div>
 
       {/* Search */}
-      <div className="p-3 shrink-0">
+      <div className="px-4 py-3 shrink-0">
         <div className="flex items-center gap-2 bg-[var(--border)] dark:bg-[var(--bg-secondary)] rounded-[12px] px-3 py-2">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <input className="flex-1 bg-transparent border-0 outline-none text-[13px] placeholder:text-[var(--text-secondary)] dark:text-[var(--text-primary)] dark:placeholder:text-[var(--text-tertiary)]" placeholder={`搜索${TABS.find(t => t.key === tab)?.label || ""}`} value={search} onChange={e => setSearch(e.target.value)} />
@@ -301,7 +314,7 @@ export function LeftSidebar() {
         <AnimatePresence mode="wait">
           {/* ── 助手 Tab ── */}
           {tab === "agents" && (
-            <motion.div key="agents" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
+            <motion.div key="agents" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-4 pb-16 overflow-x-hidden">
               {loading ? (
                 <div className="space-y-1">
                   {[1,2,3].map(i => (
@@ -318,9 +331,9 @@ export function LeftSidebar() {
                     <div key={agent.id}
                       onClick={() => handleOpenAgentChat(agent.id)}
                       onContextMenu={e => handleContextMenu(e, agent.id)}
-                      className={cn("relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
+                      className={cn("relative flex items-center gap-3 px-3 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
-                      <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center shrink-0 text-white", AGENT_COLORS[agent.adapterType] || "from-gray-400 to-gray-500")}>
+                      <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center shrink-0 text-white", getAgentColor(agent))}>
                         {agent.roleType === "custom" ? (agent.avatarUrl ? <img src={agent.avatarUrl} className="w-10 h-10 rounded-full object-cover" alt={agent.name} /> : <AgentPlaceholderIcon size={18} />) : <AgentIcon adapterType={agent.adapterType} size={18} />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -336,7 +349,7 @@ export function LeftSidebar() {
 
           {/* ── 群聊 Tab ── */}
           {tab === "groups" && (
-            <motion.div key="groups" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
+            <motion.div key="groups" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-4 pb-16 overflow-x-hidden">
               {groupSessions.filter(s => searchFilter(s.title||"")).length === 0 ? (
                 <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                   <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
@@ -350,7 +363,7 @@ export function LeftSidebar() {
                   const isActive = activeSessionId === s.id;
                   return (
                     <div key={s.id} onClick={() => setActiveSession(s.id)}
-                      className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
+                      className={cn("group relative flex items-center gap-3 px-3 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                       <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[var(--bg-tertiary)]">
                         <span className="text-sm font-bold text-[var(--text-secondary)]">#</span>
@@ -380,7 +393,7 @@ export function LeftSidebar() {
 
           {/* ── 话题 Tab ── */}
           {tab === "topics" && (
-            <motion.div key="topics" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
+            <motion.div key="topics" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-4 pb-16 overflow-x-hidden">
               {!selectedContactId ? (
                 <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                   <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
@@ -412,7 +425,7 @@ export function LeftSidebar() {
                       const isActive = activeSessionId === s.id;
                       return (
                         <div key={s.id} onClick={() => setActiveSession(s.id)}
-                          className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
+                          className={cn("group relative flex items-center gap-3 px-3 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                           {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                           <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 bg-gradient-to-br from-blue-400 to-blue-500">
                             <span className="text-white text-[11px] font-semibold">@</span>
@@ -444,7 +457,7 @@ export function LeftSidebar() {
 
           {/* ── 已归档 Tab ── */}
           {tab === "archived" && (
-            <motion.div key="archived" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-3 pb-16">
+            <motion.div key="archived" initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }} className="px-4 pb-16 overflow-x-hidden">
               {archivedSessions.length === 0 ? (
                 <div className="text-center text-[13px] text-[var(--text-tertiary)] dark:text-[var(--text-tertiary)] py-12">
                   <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center">
@@ -459,7 +472,7 @@ export function LeftSidebar() {
                   const isGroup = s.type === "group";
                   return (
                     <div key={s.id} onClick={() => setActiveSession(s.id)}
-                      className={cn("group relative flex items-center gap-3 px-2 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
+                      className={cn("group relative flex items-center gap-3 px-3 py-2 rounded-[12px] cursor-pointer transition-all duration-150 hover-lift", isActive && "bg-white dark:bg-[var(--bg-secondary)] shadow-sm")}>
                       {isActive && <div className="absolute left-0 top-2 bottom-2 w-[3px] bg-[var(--accent)] rounded-full" />}
                       <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 bg-[var(--border)] dark:bg-[var(--bg-tertiary)] opacity-50">
                         <span className="text-sm font-bold text-[var(--text-secondary)]">{isGroup ? "#" : "@"}</span>
@@ -480,23 +493,33 @@ export function LeftSidebar() {
         </AnimatePresence>
       </ScrollArea>
 
-      {/* Bottom button */}
-      {bottomBtn && (
-      <div className="p-3 shrink-0">
+      {/* Bottom area */}
+      <div className="shrink-0 px-4 py-3 space-y-2">
+        {bottomBtn && (
+          <button
+            onClick={bottomBtn.onClick}
+            disabled={bottomBtn.disabled}
+            className={cn(
+              "w-full py-2.5 rounded-[12px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
+              bottomBtn.disabled
+                ? "bg-[var(--text-tertiary)] dark:bg-[var(--bg-tertiary)] text-white dark:text-[var(--text-tertiary)] cursor-not-allowed"
+                : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
+            )}
+          >
+            {bottomBtn.label}
+          </button>
+        )}
         <button
-          onClick={bottomBtn.onClick}
-          disabled={bottomBtn.disabled}
-          className={cn(
-            "w-full py-2.5 rounded-[12px] text-[15px] font-medium transition-all duration-150 active:scale-[0.98]",
-            bottomBtn.disabled
-              ? "bg-[var(--text-tertiary)] dark:bg-[var(--bg-tertiary)] text-white dark:text-[var(--text-tertiary)] cursor-not-allowed"
-              : "bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]"
-          )}
+          onClick={onOpenSettings}
+          className="w-full py-2 rounded-[12px] text-[13px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] dark:hover:bg-[var(--bg-tertiary)] transition-all flex items-center justify-center gap-2"
         >
-          {bottomBtn.label}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+          </svg>
+          设置
         </button>
       </div>
-      )}
 
       {/* Agent Editor */}
       <AgentEditor open={editorOpen} onClose={() => setEditorOpen(false)} editAgent={editingAgent} />

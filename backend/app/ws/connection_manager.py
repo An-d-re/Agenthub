@@ -31,7 +31,10 @@ class ConnectionManager:
         self._client_sessions[client_id] = session_id
         self._heartbeat_tasks[client_id] = asyncio.create_task(self._heartbeat_loop(client_id))
 
-    async def disconnect(self, client_id: str):
+    async def disconnect(self, client_id: str, expected_ws: WebSocket | None = None):
+        # 校验 websocket 实例：防止旧协程的 finally 误杀新连接
+        if expected_ws is not None and self._connections.get(client_id) is not expected_ws:
+            return
         ws = self._connections.pop(client_id, None)
         self._client_sessions.pop(client_id, None)
         if task := self._heartbeat_tasks.pop(client_id, None):

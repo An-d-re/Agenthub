@@ -98,6 +98,11 @@ class ConfirmedHandler(BasePhaseHandler):
                 "required_capability": "code",
             }]
 
+        # 预生成 UUID，让 dag_for_frontend 携带 db_id 与 WS task.update 对齐
+        for td in task_dag:
+            if isinstance(td, dict):
+                td["_db_id"] = str(uuid.uuid4())
+
         # 为每个任务匹配现有 Agent（排除已分配给不同能力的 Agent）
         assigned_agent_ids: set[str] = set()
         capability_assigned: dict[str, str] = {}  # capability → agent_id
@@ -113,6 +118,7 @@ class ConfirmedHandler(BasePhaseHandler):
                 agent = await ctx.db.get(Agent, reuse_id)
                 dag_for_frontend.append({
                     "id": td["id"],
+                    "db_id": td.get("_db_id", ""),
                     "title": td["title"],
                     "description": td.get("description", "")[:200],
                     "dependencies": td.get("dependencies", []),
@@ -126,6 +132,9 @@ class ConfirmedHandler(BasePhaseHandler):
 
             match = await match_task_to_agent(
                 ctx.db, ctx.plan.session_id, capability, assigned_agent_ids,
+                task_title=td.get("title", ""),
+                task_description=td.get("description", ""),
+                mentions=ctx.mentions,
             )
 
             if match.matched and match.agent:
@@ -134,6 +143,7 @@ class ConfirmedHandler(BasePhaseHandler):
                 capability_assigned[capability] = match.agent.id
                 dag_for_frontend.append({
                     "id": td["id"],
+                    "db_id": td.get("_db_id", ""),
                     "title": td["title"],
                     "description": td.get("description", "")[:200],
                     "dependencies": td.get("dependencies", []),
@@ -147,6 +157,7 @@ class ConfirmedHandler(BasePhaseHandler):
                 td["assigned_agent_id"] = None
                 dag_for_frontend.append({
                     "id": td["id"],
+                    "db_id": td.get("_db_id", ""),
                     "title": td["title"],
                     "description": td.get("description", "")[:200],
                     "dependencies": td.get("dependencies", []),
@@ -157,13 +168,13 @@ class ConfirmedHandler(BasePhaseHandler):
                     "match_reason": match.reason,
                 })
 
-        # 创建 Task 记录（预生成 UUID 显式传入 id，避免 add() 后 id 为 None）
+        # 创建 Task 记录（使用预生成的 _db_id）
         id_map: dict[str, str] = {}
         for td in task_dag:
             if not isinstance(td, dict):
                 logger.warning("_decompose: 跳过非 dict 的 task_dag 元素: %s", type(td).__name__)
                 continue
-            task_id = str(uuid.uuid4())
+            task_id = td.get("_db_id") or str(uuid.uuid4())
             task = Task(
                 id=task_id,
                 plan_id=ctx.plan.id,
@@ -237,7 +248,7 @@ class ConfirmedHandler(BasePhaseHandler):
 
         assignments: [{"task_id": "task-1", "agent_id": "uuid", "adapter_type": null}, ...]
         """
-        from app.core.agent_factory import create_temp_agent
+        from app.core.agent_factory import create_agent, match_task_to_agent
 
         task_dag = ctx.plan.task_dag or []
         id_map: dict[str, dict] = {td["id"]: td for td in task_dag if td is not None}
@@ -267,38 +278,66 @@ class ConfirmedHandler(BasePhaseHandler):
 
             agent_id = assign.get("agent_id")
             if agent_id:
-                # 复用现有 Agent
+                # 复用用户指定的 Agent
                 db_task.assigned_agent_id = agent_id
                 td["assigned_agent_id"] = agent_id  # 同步到内存 DAG
             else:
-                # 新建临时 Agent
-                adapter_type = assign.get("adapter_type", "deepseek")
-                api_key = assign.get("api_key")
+                # 先查全局是否有可复用的 Agent
                 capability = td.get("required_capability", "code")
-                logger.info("confirm_with_assignments: creating temp agent for dag_id=%s capability=%s", dag_id, capability)
-                new_agent = await create_temp_agent(
-                    ctx.db, ctx.plan.session_id, db_task,
-                    capability, adapter_type, api_key,
+                match = await match_task_to_agent(
+                    ctx.db, ctx.plan.session_id, capability, set(),
+                    task_title=td.get("title", ""),
+                    task_description=td.get("description", ""),
+                    mentions=ctx.mentions,
                 )
-                td["assigned_agent_id"] = new_agent.id
-                db_task.assigned_agent_id = new_agent.id
-                await self._send_system_message(
-                    ctx.db, ctx.plan.session_id,
-                    f"✨ 创建了临时 Agent「{new_agent.name}」（{adapter_type}）",
-                    agent_id=new_agent.id, agent_role=capability,
-                    pending_events=ctx.pending_events,
+                if match.matched and match.agent:
+                    agent_id = match.agent.id
+                    db_task.assigned_agent_id = agent_id
+                    td["assigned_agent_id"] = agent_id
+                    logger.info("confirm_with_assignments: 复用已有 Agent %s (%s) for dag_id=%s", agent_id[:8], match.agent.name, dag_id)
+                else:
+                    # 没有可复用的，创建新 Agent
+                    adapter_type = assign.get("adapter_type", "deepseek")
+                    api_key = assign.get("api_key")
+                    logger.info("confirm_with_assignments: creating agent for dag_id=%s capability=%s", dag_id, capability)
+                    new_agent = await create_agent(
+                        ctx.db, ctx.plan.session_id, db_task,
+                        capability, adapter_type, api_key,
+                    )
+                    td["assigned_agent_id"] = new_agent.id
+                    db_task.assigned_agent_id = new_agent.id
+                    await self._send_system_message(
+                        ctx.db, ctx.plan.session_id,
+                        f"✨ 创建了 Agent「{new_agent.name}」（{adapter_type}）",
+                        agent_id=new_agent.id, agent_role=capability,
+                        pending_events=ctx.pending_events,
+                    )
+                    ctx.pending_events.append({
+                        "type": "agent.created",
+                        "session_id": ctx.plan.session_id,
+                        "payload": {
+                            "id": new_agent.id, "name": new_agent.name,
+                            "role_type": new_agent.role_type,
+                            "adapter_type": new_agent.adapter_type,
+                            "capability_tags": new_agent.capability_tags,
+                            "is_deletable": new_agent.is_deletable,
+                        },
+                    })
+
+        # 过滤未勾选的任务：从 task_dag 中移除并取消 DB 状态
+        assigned_dag_ids = {a.get("task_id", "") for a in assignments}
+        unchecked = [td for td in task_dag if td["id"] not in assigned_dag_ids]
+        for td in unchecked:
+            db_task = title_to_task.get(td["title"])
+            if db_task and db_task.status == "pending":
+                db_task.status = "cancelled"
+                logger.info(
+                    "confirm_with_assignments: cancelling unchecked task dag_id=%s db_id=%s",
+                    td["id"], db_task.id[:8],
                 )
-                ctx.pending_events.append({
-                    "type": "agent.created",
-                    "session_id": ctx.plan.session_id,
-                    "payload": {
-                        "id": new_agent.id, "name": new_agent.name,
-                        "role_type": new_agent.role_type,
-                        "adapter_type": new_agent.adapter_type,
-                        "capability_tags": new_agent.capability_tags,
-                        "is_deletable": new_agent.is_deletable,
-                    },
-                })
+        task_dag = [td for td in task_dag if td["id"] in assigned_dag_ids]
+        for td in task_dag:
+            td["dependencies"] = [d for d in td.get("dependencies", []) if d in assigned_dag_ids]
 
         ctx.plan.task_dag = task_dag
         ctx.plan.phase = "executing"

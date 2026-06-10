@@ -204,8 +204,13 @@ class ExecutingHandler(BasePhaseHandler):
             )
         else:
             capability = self._resolve_task_capability(plan, task)
-            from app.core.agent_factory import match_task_to_agent, create_temp_agent
-            match = await match_task_to_agent(db, session_id, capability, set())
+            from app.core.agent_factory import match_task_to_agent, create_agent
+            match = await match_task_to_agent(
+                db, session_id, capability, set(),
+                task_title=task.title or "",
+                task_description=task.description or "",
+                mentions=mentions,
+            )
             if match.matched and match.agent:
                 agent, adapter = await self._get_agent_adapter(db, match.agent.id)
                 task.assigned_agent_id = match.agent.id
@@ -213,13 +218,13 @@ class ExecutingHandler(BasePhaseHandler):
                 agent, adapter = None, None
 
         if not agent or not adapter:
-            from app.core.agent_factory import create_temp_agent
+            from app.core.agent_factory import create_agent
             capability = self._resolve_task_capability(plan, task)
             logger.info(
-                "_execute_single_task FALLBACK: creating temp agent for task=%s title=%s capability=%s",
+                "_execute_single_task FALLBACK: creating agent for task=%s title=%s capability=%s",
                 task.id, task.title, capability,
             )
-            agent = await create_temp_agent(
+            agent = await create_agent(
                 db, session_id, task, capability, "deepseek",
             )
             task.assigned_agent_id = agent.id

@@ -27,7 +27,6 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
   const confirmedPlan = useChatStore((s) =>
     activeSessionId ? s.confirmedPlans[activeSessionId] : undefined
   );
-  const clearConfirmedPlan = useChatStore((s) => s.clearConfirmedPlan);
   const removeDagTask = useChatStore((s) => s.removeDagTask);
   const [msgLoading, setMsgLoading] = useState(false);
   const [msgError, setMsgError] = useState(false);
@@ -85,7 +84,7 @@ export function MessageList({ onModify, onPlanAction, onRegenerate, searchTerm }
 
   const handleDagConfirm = (assignments: Record<string, unknown>[]) => {
     onPlanAction?.("confirm", undefined, undefined, assignments);
-    if (activeSessionId) clearConfirmedPlan(activeSessionId);
+    // 不清除 confirmedPlan，协作剧场需要继续展示任务流水线
   };
 
   const handleDagDelete = (taskId: string) => {

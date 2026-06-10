@@ -163,9 +163,8 @@ class BasePhaseHandler:
                 if aid in exclude:
                     continue
                 agent = agent_map.get(aid)
-                if agent and agent.name == m:
-                    if role in ("critic", "planner"):
-                        return await self._get_agent_adapter(db, aid)
+                if agent and agent.name.lower() == m.lower():
+                    return await self._get_agent_adapter(db, aid)
 
         # ── 2. 能力匹配 ──────────────────────────────────
         if task_context:
@@ -294,7 +293,6 @@ class BasePhaseHandler:
             system_prompt=system_prompt,
             capability_tags=capability_tags,
             is_deletable=True,
-            is_temp=True,
         )
         db.add(agent)
         await db.flush()

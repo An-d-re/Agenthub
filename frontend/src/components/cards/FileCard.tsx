@@ -102,7 +102,7 @@ export function FileCard({ message }: Props) {
       </div>
 
       {/* Actions row */}
-      <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]/50">
+      <div className="flex items-center gap-2 pt-1 border-t border-[var(--border)]">
         {canPreview && (
           <button
             onClick={() => setShowPreview(true)}

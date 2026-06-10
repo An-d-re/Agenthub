@@ -20,7 +20,7 @@ function RightPanelHeader() {
   const total = confirmedPlan?.tasks?.length || tasks.length;
   const done = tasks.filter(t => t.status === "done").length;
   return (
-    <div className="shrink-0 h-[48px] flex items-center justify-between px-4 border-b border-[var(--border)]/50">
+    <div className="shrink-0 h-[56px] flex items-center justify-between px-4 border-b border-[var(--border)]">
       <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">协作剧场</h3>
       {total > 0 && (
         <span className="text-[11px] font-medium tabular-nums text-[var(--text-secondary)]">{done}/{total}</span>
@@ -106,6 +106,50 @@ export default function Home() {
     window.history.replaceState({}, "", url.toString());
   }, [activeSessionId]);
 
+  // 切换会话时从后端加载已有任务计划（刷新页面也能恢复协作剧场）
+  useEffect(() => {
+    if (!activeSessionId) return;
+    const store = useChatStore.getState();
+    // 已经有 plan 的跳过（WebSocket 会实时更新）
+    if (store.confirmedPlans[activeSessionId]) return;
+    fetch(`${API_BASE}/api/sessions/${activeSessionId}/plan`)
+      .then(r => r.json())
+      .then(data => {
+        // /plan 端点直接返回 { phase, tasks: DAGTask[], hint }，tasks 已含 id/db_id/dependencies/status
+        const apiTasks = data?.tasks;
+        if (apiTasks?.length > 0) {
+          const dagTasks = apiTasks.map((td: Record<string, unknown>) => ({
+            id: (td.id || "") as string,
+            db_id: (td.db_id || td.id || "") as string,
+            title: (td.title || "") as string,
+            description: (td.description || "") as string,
+            dependencies: (td.dependencies || []) as string[],
+            required_capability: (td.required_capability || "code") as string,
+            executor_type: (td.executor_type || "existing") as "existing" | "new",
+            agent_id: (td.assigned_agent_id || td.agent_id || null) as string | null,
+            agent_name: (td.agent_name || null) as string | null,
+            match_reason: (td.match_reason || "") as string,
+          }));
+          store.setConfirmedPlan(activeSessionId, { tasks: dagTasks, hint: data.hint || "" });
+
+          // 同时把运行时状态写入 tasks store，让协作剧场在 WS 重连前就能展示最新状态
+          store.setTasks(activeSessionId, apiTasks.map((t: Record<string, unknown>) => ({
+            taskId: (t.db_id || t.id || "") as string,
+            title: (t.title || "") as string,
+            description: (t.description || "") as string,
+            status: (t.status || "pending") as "pending" | "running" | "reviewing" | "done" | "blocked" | "retrying" | "failed" | "dispute" | "cancelled",
+            result: t.result_preview as string | undefined,
+            error: t.error_message as string | undefined,
+            retryCount: (t.retry_count || 0) as number,
+            agentId: (t.assigned_agent_id || "") as string,
+            startedAt: t.started_at as string | undefined,
+            completedAt: t.completed_at as string | undefined,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, [activeSessionId]);
+
   // hydration 完成前不渲染，避免 SSR/客户端 DOM 不匹配
   if (!hydrated) return null;
 
@@ -123,7 +167,7 @@ export default function Home() {
         "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-2xl",
         !sidebarOpen && "max-md:-translate-x-full",
       )}>
-        <LeftSidebar />
+        <LeftSidebar onOpenSettings={() => setShowSettings(true)} />
       </div>
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -147,16 +191,6 @@ export default function Home() {
 
       {/* Top-right controls — z-40 so Settings/AgentEditor panels (z-50) cover them */}
       <div className="fixed top-1.5 right-12 z-40 flex items-center gap-2">
-        <button
-          onClick={() => setShowSettings(true)}
-          className="w-10 h-10 rounded-full bg-[var(--bg-primary)]/80 backdrop-blur border border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"
-          title="设置"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-          </svg>
-        </button>
         <button
           onClick={toggle}
           className="w-10 h-10 rounded-full bg-[var(--bg-primary)]/80 backdrop-blur border border-[var(--border)] shadow-sm flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all"

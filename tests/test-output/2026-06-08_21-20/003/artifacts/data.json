@@ -1,0 +1,36 @@
+{
+  "title": "某公司Q1销售额及环比分析",
+  "description": "2025年第一季度（1月-3月）销售额数据及逐月环比增长分析",
+  "data": [
+    {
+      "month": "1月",
+      "sales": 120,
+      "growth_amount": null,
+      "growth_rate": null,
+      "note": "基准月，无环比数据"
+    },
+    {
+      "month": "2月",
+      "sales": 185,
+      "growth_amount": 65,
+      "growth_rate": "54.17%",
+      "note": "环比1月增长65万"
+    },
+    {
+      "month": "3月",
+      "sales": 203,
+      "growth_amount": 18,
+      "growth_rate": "9.73%",
+      "note": "环比2月增长18万"
+    }
+  ],
+  "summary": {
+    "total_sales": 508,
+    "avg_monthly_sales": 169.33,
+    "max_month": "3月",
+    "max_sales": 203,
+    "min_month": "1月",
+    "min_sales": 120,
+    "overall_growth_rate": "69.17%"
+  }
+}

@@ -161,7 +161,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] rounded-[24px] px-5 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-[var(--bg-primary)] transition-all duration-200">
+      <div className="flex items-end gap-2 bg-[var(--bg-secondary)] rounded-[24px] px-6 py-2 border border-transparent focus-within:border-[var(--accent)]/20 focus-within:bg-[var(--bg-primary)] transition-all duration-200">
         <input
           ref={fileInputRef}
           type="file"
@@ -196,7 +196,7 @@ export function MessageInput({ onSend, disabled, isThinking, onStop }: Props) {
           value={text} onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="输入消息，@ 选择 Agent"
-          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[var(--text-tertiary)] dark:text-[var(--text-primary)] leading-relaxed py-1.5"
+          className="flex-1 min-h-[24px] max-h-[120px] resize-none bg-transparent border-0 outline-none text-[15px] placeholder:text-[var(--text-tertiary)] dark:placeholder:text-[var(--text-tertiary)] dark:text-[var(--text-primary)] leading-relaxed py-1.5 pl-1.5"
           rows={1} disabled={disabled}
         />
         {isThinking && (

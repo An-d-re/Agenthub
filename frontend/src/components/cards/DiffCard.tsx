@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -38,6 +38,18 @@ export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProp
   const [applied, setApplied] = useState(false);
   const [applyError, setApplyError] = useState("");
   const [applyStatus, setApplyStatus] = useState<"success" | "merged" | "conflict" | "">("");
+
+  // 外部 open 控制时，弹窗打开后自动拉取内容
+  useEffect(() => {
+    if (open && !code && artifact.artifactId) {
+      fetch(`${API_BASE}/api/artifacts/${artifact.artifactId}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((data) => {
+          if (data) setCode(data.modified_content || "");
+        })
+        .catch(() => console.warn("获取 artifact 内容失败"));
+    }
+  }, [open, code, artifact.artifactId]);
 
   const handleOpen = async () => {
     if (!code && artifact.artifactId) {
@@ -159,7 +171,7 @@ export function DiffCard({ artifact, open: externalOpen, onClose }: DiffCardProp
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl h-[80vh]">
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-sm font-mono flex items-center gap-2">
               <span>{artifact.filePath}</span>

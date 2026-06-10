@@ -1,0 +1,7 @@
+8. [GET] http://localhost:8000/api/sessions => [200] OK
+9. [GET] http://localhost:8000/api/agents => [200] OK
+10. [GET] http://localhost:8000/api/sessions/38eefe71-cc02-4cf9-ae97-6cef3a38d88a/messages?limit=50 => [200] OK
+11. [GET] http://localhost:8000/api/sessions/38eefe71-cc02-4cf9-ae97-6cef3a38d88a => [200] OK
+12. [GET] http://localhost:8000/api/models/available => [200] OK
+
+Note: 7 static requests not shown, run with "static" option to see them.

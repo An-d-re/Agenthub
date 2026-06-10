@@ -213,7 +213,7 @@ export function ChatPanel() {
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[var(--bg-primary)] min-w-[400px]">
-      <div className="glass shrink-0 px-6 flex items-center h-[48px] border-b border-[var(--border)]/50 relative z-10">
+      <div className="glass shrink-0 px-6 flex items-center h-[56px] pt-2 border-b border-[var(--border)] relative z-10">
         <div className="flex-1 min-w-0">
           {editingTitle ? (
             <input autoFocus value={title} onChange={e=>setTitle(e.target.value)}

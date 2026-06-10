@@ -171,9 +171,6 @@ class Orchestrator:
 
                 elif phase == "done":
                     self.middleware.reset_session(self.session_id)
-                    # 销毁该 Plan 期间创建的临时 Agent
-                    from app.core.agent_factory import destroy_temp_agents
-                    await destroy_temp_agents(db, self.session_id)
                     if len(user_message.strip()) > 5:
                         plan.phase = "clarify"
                         plan.task_dag = {}
@@ -286,6 +283,8 @@ class Orchestrator:
                     next_phase = await handler.execute(ctx)
 
                 self._pending_events.extend(pending)
+                # 先发布 agent.created，确保前端在 task.update 之前拿到 Agent 信息
+                await self._flush_pending_events()
                 if next_phase == "executing":
                     plan.phase = "executing"
                     exec_pending: list[dict] = []
