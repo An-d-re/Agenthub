@@ -130,8 +130,6 @@ Done（全部完成）
 | AI 接入 | DeepSeek API, Anthropic Claude API, OpenAI Codex CLI, OpenCode CLI |
 | 部署 | Docker Compose |
 
-课题要求详见 `docs/AgentHub-多Agent协作平台设计.md`。
-
 ### 环境变量
 
 后端 `backend/.env`：
