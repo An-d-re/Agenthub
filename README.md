@@ -92,9 +92,6 @@ agenthub/
 │   │   └── lib/                 # 工具函数
 │   ├── package.json
 │   └── Dockerfile
-├── docs/                        # 产品/技术文档
-├── ai-collaboration/            # AI 协作开发记录
-├── demo/                        # 演示视频
 └── docker-compose.yml
 ```
 
@@ -133,19 +130,16 @@ Done（全部完成）
 | AI 接入 | DeepSeek API, Anthropic Claude API, OpenAI Codex CLI, OpenCode CLI |
 | 部署 | Docker Compose |
 
+课题要求详见 `docs/AgentHub-多Agent协作平台设计.md`。
+
 ### 环境变量
 
 后端 `backend/.env`：
 
 ```env
-SECRET_KEY=your-secret-key-for-api-encryption
-DEEPSEEK_API_KEY=sk-xxx
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-ANTHROPIC_API_KEY=sk-ant-xxx
+deepseek_api_key=sk-your-deepseek-key
+deepseek_base_url=https://api.deepseek.com/v1
+anthropic_api_key=
+opencode_api_key=
 ```
 
-## 比赛信息
-
-本项目为「AgentHub - 多 Agent 协作平台」参赛作品，详见 `docs/AgentHub- 多Agent协作平台设计.md`。
-
-AI 协作开发记录见 `ai-collaboration/`，包含与 Claude Code 协作的完整过程、Spec 规范、Skills 定义、问题追踪等。
